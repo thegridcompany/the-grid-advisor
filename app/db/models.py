@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field, EmailStr, validator
 from uuid import UUID
 import pendulum
+from enum import Enum
 
 
 class BaseDBModel(BaseModel):
@@ -67,7 +68,7 @@ class Client(BaseDBModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
-class InteractionType(str):
+class InteractionType(str, Enum):
     """Interaction types."""
     EMAIL = "email"
     MEETING = "meeting"

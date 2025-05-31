@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   redis:
     image: redis:7-alpine
@@ -37,7 +35,7 @@ services:
       - redis
     volumes:
       - ./app:/app/app
-    command: celery -A app.services.scheduler worker --loglevel=info
+    command: celery -A app.services.scheduler.celery_app worker --loglevel=info
 
   celery-beat:
     build: .
@@ -51,7 +49,7 @@ services:
       - redis
     volumes:
       - ./app:/app/app
-    command: celery -A app.services.scheduler beat --loglevel=info
+    command: celery -A app.services.scheduler.celery_app beat --loglevel=info
 
 volumes:
   redis_data:

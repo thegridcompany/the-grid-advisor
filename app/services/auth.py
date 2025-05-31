@@ -4,10 +4,12 @@ Authentication service for Grid Brain.
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 from uuid import UUID, uuid4
-import jwt
+from jose import jwt, exceptions
 from email_validator import validate_email
 import secrets
 import pendulum
+import asyncio
+from functools import partial
 
 from ..core.database import get_db_manager, get_supabase
 from ..core.config import settings
@@ -136,7 +138,7 @@ class AuthService:
                 "status": "error",
                 "message": "Magic link has expired"
             }
-        except jwt.InvalidTokenError:
+        except exceptions.JWTError:
             return {
                 "status": "error",
                 "message": "Invalid magic link"
@@ -218,10 +220,8 @@ class AuthService:
     async def _send_magic_link_email(self, email: str, name: str, magic_link: str) -> bool:
         """Send magic link email to user."""
         try:
-            # Use system email account for sending
-            # In production, you'd use a dedicated no-reply account
             subject = "Your Grid Brain Login Link"
-            
+
             body = f"""Hi {name},
 
 Click the link below to log in to Grid Brain:
@@ -235,7 +235,7 @@ If you didn't request this link, please ignore this email.
 Best regards,
 Grid Brain AI
 """
-            
+
             html_body = f"""
 <html>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
@@ -256,18 +256,47 @@ Grid Brain AI
 </body>
 </html>
 """
-            
-            # For now, log the magic link (in production, actually send email)
-            logger.info(f"Magic link for {email}: {magic_link}")
-            
-            # TODO: Implement actual email sending when SMTP is configured
-            # with EmailClient(system_email, system_password) as client:
-            #     return client.send_email([email], subject, body, html_body=html_body)
-            
-            return True  # Simulate successful send
-            
+
+            # Use EmailClient to send the email
+            if settings.system_email_address and settings.system_email_password:
+                email_client = EmailClient(
+                    email_address=settings.system_email_address,
+                    password=settings.system_email_password
+                )
+                # Note: EmailClient.send_email is not async, so we run it in a thread pool
+                # to avoid blocking the event loop if it were called in an async context.
+                # However, _send_magic_link_email itself is called from an async function
+                # so we need to handle this properly if we were to make EmailClient async.
+                # For now, direct call as _send_magic_link_email is awaited.
+                # If EmailClient methods become async, this would need `await`.
+                # This function as a whole should ideally be async if EmailClient is async.
+                # For simplicity and since EmailClient is currently sync, we call it directly.
+                
+                # The send_email method in EmailClient is synchronous.
+                # To call it from an async function without blocking, 
+                # it should ideally be run in a thread pool executor.
+                # However, given the current structure, and for simplicity of this step,
+                # we'll call it directly. This can be revisited for performance if it becomes a bottleneck.
+                loop = asyncio.get_event_loop()
+                # Prepara la funzione con tutti gli argomenti usando functools.partial
+                func_to_run = partial(
+                    email_client.send_email,
+                    [email],
+                    subject,
+                    body,
+                    html_body=html_body
+                )
+                return await loop.run_in_executor(
+                    None, 
+                    func_to_run
+                )
+            else:
+                logger.warning("System email address or password not configured. Cannot send magic link email.")
+                logger.info(f"Magic link for {email} (not sent): {magic_link}")
+                return False
+
         except Exception as e:
-            logger.error(f"Failed to send magic link email: {str(e)}")
+            logger.error(f"Failed to send magic link email: {str(e)}", exc_info=True)
             return False
     
     async def create_team_member(

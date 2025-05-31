@@ -13,8 +13,8 @@ SQLAlchemy==2.0.23
 anthropic==0.7.8
 openai==1.3.8
 tiktoken==0.5.2
-langchain==0.0.348
-langchain-community==0.0.10
+langchain
+langchain-community
 
 # Email Processing
 imap-tools==1.5.0
@@ -31,7 +31,7 @@ redis==5.0.1
 hiredis==2.2.3
 
 # HTTP and API
-httpx==0.25.2
+httpx==0.24.1
 aiofiles==23.2.1
 
 # Data Processing

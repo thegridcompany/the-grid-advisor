@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     email_server_smtp: str = Field(default="authsmtp.securemail.pro", env="EMAIL_SERVER_SMTP")
     email_port_imap: int = Field(default=993, env="EMAIL_PORT_IMAP")
     email_port_smtp: int = Field(default=465, env="EMAIL_PORT_SMTP")
+    system_email_address: str = Field(default="hello@thegridcompany.it", env="SYSTEM_EMAIL_ADDRESS")
+    system_email_password: str = Field(..., env="SYSTEM_EMAIL_PASSWORD")
     
     # Redis Cache
     redis_url: Optional[str] = Field(default=None, env="REDIS_URL")
