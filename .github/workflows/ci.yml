@@ -1,0 +1,105 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main] # Assuming 'main' is the primary branch
+  pull_request:
+    branches: [main] # Assuming 'main' is the primary branch
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20 # Specify your project's Node.js version
+          cache: "npm"
+          cache-dependency-path: grid-brain-frontend/package-lock.json # Path to lock file relative to repo root
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11" # Specify your project's Python version
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Install frontend dependencies
+        working-directory: ./grid-brain-frontend # Assuming monorepo structure where package.json is in a subdirectory
+        run: npm ci
+
+      - name: Run Frontend Linters
+        working-directory: ./grid-brain-frontend
+        run: npm run lint # Or turbo run lint if configured at the root and preferred
+
+      - name: Run Frontend Tests
+        working-directory: ./grid-brain-frontend
+        run: npm run test # This now runs with --coverage
+
+      - name: Run Backend Tests (Python)
+        run: |
+          source venv/bin/activate
+          pytest
+
+      - name: Build Frontend
+        working-directory: ./grid-brain-frontend
+        run: npm run build # Or turbo run build
+
+      - name: Upload Frontend Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage-report
+          path: grid-brain-frontend/coverage/
+          if-no-files-found: warn # Don't fail workflow if coverage folder not found
+
+      - name: Upload Backend Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-report
+          path: htmlcov/ # Default output directory for pytest-cov html report
+          if-no-files-found: warn # Don't fail workflow if coverage folder not found
+
+  deploy_preview:
+    runs-on: ubuntu-latest
+    needs: build_and_test
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Vercel Action will handle build and deployment
+      - name: Deploy to Vercel Preview
+        uses: vercel/vercel-action@v3.2.0 # Check for the latest version
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          # Vercel automatically builds, so no need for manual build steps here usually.
+          # It will use the build settings from your vercel.json or project settings on Vercel.
+          # Ensure your Vercel project is correctly linked and configured for your monorepo (e.g., root directory setting).
+          working-directory: ./grid-brain-frontend
+
+  deploy_production:
+    runs-on: ubuntu-latest
+    needs: build_and_test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel Production
+        uses: vercel/vercel-action@v3.2.0 # Check for the latest version
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          production: true # This flag deploys to production
+          working-directory: ./grid-brain-frontend
