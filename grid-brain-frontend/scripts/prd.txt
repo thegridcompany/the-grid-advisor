@@ -1,0 +1,127 @@
+<context>
+# Overview  
+**Grid Brain** is an AI-powered operating system for **The Grid Company**.  
+It turns raw input — e-mails, Strategic Client Assessment (SCA) results and day-to-day project data — into:
+
+* actionable project road-maps & technical blueprints
+* cost / margin estimates & auto-generated proposals
+* a complete **Agile Project Management Workspace** (Scrum-ready, Trello-style) so the team can plan, track and ship work without leaving the platform
+
+The single product now covers the entire delivery life-cycle, from the first client questionnaire to the last sprint retrospective.
+
+---
+
+# Core Features
+
+| # | Feature                                         | What it does                                                                                                                                           | Why it matters                                                      | How it works (high level)                                                                                                   |
+| - | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 1 | **E-mail Intelligence**                         | Parses company inbox every 5 min, tags threads, surfaces tasks & risks                                                                                 | Saves hours of manual triage                                        | IMAP pull → embedding search → priority rules                                                                               |
+| 2 | **Strategic Client Assessment (SCA) Ingestion** | Imports quadrant, scores & recommendations                                                                                                             | Re-uses existing discovery tool                                     | Front-end normaliser → `GridBrief` JSON                                                                                     |
+| 3 | **Project Blueprint Generator**                 | Creates phased roadmap, tech stack & hour estimate                                                                                                     | 80 % faster scoping                                                 | RAG prompt to Claude Haiku / local Mistral                                                                                  |
+| 4 | **Cost & Pricing Engine**                       | Computes internal cost, margin & price tiers                                                                                                           | Consistent, profitable quotes                                       | Pure-Python micro-service + rates table                                                                                     |
+| 5 | **Proposal Composer**                           | Exports branded PDF / Markdown proposal                                                                                                                | One-click client material                                           | Jinja2 template → React-PDF                                                                                                 |
+| 6 | **Proactive Assistant**                         | Monitors e-mail & DB, warns on drift or upsell                                                                                                         | Prevents surprises, grows revenue                                   | Event triggers → Slack / e-mail nudges                                                                                      |
+| 7 | **Retention Advisor**                           | Suggests maintenance & cross-sell packages                                                                                                             | Boosts LTV                                                          | Lightweight LLM prompt on win/loss history                                                                                  |
+| 8 | **Agile Project Management Suite**              | Full Scrum workspace: projects → epics → stories/bugs, drag-&-drop Kanban, Gantt timeline, sprints, assignees, comments, attachments, shareable boards | Replaces external tools (Trello/Jira), keeps data & AI in one place | React 19 board UI (react-beautiful-dnd) ←→ Supabase; real-time sync via WebSocket; timeline view via Tremor Gantt component |
+
+---
+
+# User Experience
+
+## User Personas
+
+1. **Consultant / PO** – creates assessments, maintains backlog, sends proposals.
+2. **Developer** – pulls tasks from Kanban, logs effort, comments.
+3. **Tech Lead** – reviews blueprint, approves tech decisions.
+4. **Partner / CFO** – monitors margin dashboards, approves pricing.
+5. **Client (optional)** – sees public board slice & roadmap PDF.
+
+## Key User Flows
+
+1. **Deal Creation** – SCA → Blueprint → Price → Proposal → Convert to Project Board.
+2. **Sprint Planning** – PO drags stories into Sprint column, sets capacity, starts sprint.
+3. **Daily Work** – Dev moves card across Kanban, logs hours; Gantt auto-updates.
+4. **Proactive Alerts** – Assistant flags tasks over estimate or e-mail risks.
+
+## UI/UX Considerations
+
+* Single navigation shell shared with SCA.
+* **Kanban Board**: drag-&-drop, inline edit, swim-lanes by Epic.
+* **Gantt / Timeline**: toggle view; zoom, critical-path highlight.
+* **Dark/Light**, keyboard shortcuts, a11y labels.
+* Link cards to e-mail threads & blueprint phases.
+
+</context>
+
+<PRD>
+# Technical Architecture  
+
+| Layer           | Component                                                                                                                                | Tech                 |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| **Front-end**   | Next.js 15 / React 19 monorepo<br>— **Kanban & Gantt module** (react-beautiful-dnd + Tremor Gantt)<br>— Shared UI kit (Tailwind, Lucide) | TypeScript           |
+| **API Gateway** | FastAPI 3.11                                                                                                                             | JWT, RBAC            |
+| **Services**    | LLM Proxy, Pricing Engine, Notification Worker                                                                                           | Celery + Redis       |
+| **Real-time**   | Supabase Realtime WebSocket channels                                                                                                     | Board events sync    |
+| **Data**        | PostgreSQL + pgvector                                                                                                                    | Row-level security   |
+| **Infra**       | Docker; Fly.io or Hetzner CX21; Vercel for FE                                                                                            | GitHub Actions CI/CD |
+
+### Board-centric Data Models (additive)
+
+| Table     | Key fields                                                                                |
+| --------- | ----------------------------------------------------------------------------------------- |
+| `project` | id, name, client\_id, blueprint\_id                                                       |
+| `epic`    | id, project\_id, title, status, start, end                                                |
+| `ticket`  | id, epic\_id, type (`story`/`bug`/`task`), status, assignee\_id, points, due, description |
+| `sprint`  | id, project\_id, name, start, end, velocity\_target                                       |
+| `comment` | id, ticket\_id, author\_id, body, created\_at                                             |
+
+### APIs & Integrations
+
+* `GET/POST /api/projects/:id/board` – JSON board schema
+* `WS /realtime/board/:projectId` – pub/sub live updates
+* `POST /api/tickets` – create story/bug/fix
+* `GET /api/gantt/:projectId` – flattened tasks with dates
+
+### Infrastructure Requirements
+
+* 1 × small Postgres instance (\~\$12/m)
+* 1 × basic VM (2 vCPU, 2 GB) for FastAPI & workers (\~€6/m)
+* Optional GPU spot instance for Mistral (on-demand)
+
+# Development Roadmap
+
+| Phase       | Scope (pure scope; no dates)                                                                                                                           | Deliverables                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| **MVP**     | Auth ➜ SCA ingest ➜ Blueprint ➜ Pricing ➜ Proposal PDF ➜ **Kanban Board v1** (columns: Backlog / Sprint / Done)                                        | End-to-end flow; drag-&-drop stories |
+| **Phase 2** | E-mail Intelligence ➜ Proactive Assistant ➜ **Board Enrichment** (Epics, points, assignees, comments) ➜ Sprint management (start/close, burndown calc) | Daily operational value              |
+| **Phase 3** | **Gantt View** (timeline, dependencies) ➜ Retention Advisor ➜ Multi-scenario pricing ➜ Board sharing (client readonly link)                            | Cross-team planning                  |
+| **Phase 4** | Predictive risk analytics ➜ Custom model fine-tune ➜ Integrations: GitHub issues sync, Slack bot for board events                                      | Full DevOps loop                     |
+
+# Logical Dependency Chain
+
+1. **Foundation** – Auth → Base DB schema → Board tables (tickets, epics)
+2. **Visible First Cut** – Kanban v1 with drag-&-drop (Backlog → Done)
+3. **Deal Flow** – SCA ingest → Blueprint → Pricing → Proposal PDF
+4. **Enhancements** – E-mail Intelligence → Proactive Assistant → Sprint tooling
+5. **Advanced Planning** – Gantt timeline, dependency tracking, velocity analytics
+
+Atomic slices ensure each phase leaves a usable front-end: e.g. Kanban v1 works before Gantt exists.
+
+# Risks and Mitigations
+
+| Risk                                    | Impact     | Mitigation                                                                           |
+| --------------------------------------- | ---------- | ------------------------------------------------------------------------------------ |
+| Drag-&-drop perf on large boards        | UX lag     | Virtualised list (react-window); pagination older sprints                            |
+| Real-time sync conflicts                | Data loss  | Supabase row-version; optimistic UI with rollback                                    |
+| Scope creep (board features rival Jira) | Delay      | Strict MVP board: columns, epics, assignees; advanced features gated to later phases |
+| LLM cost & latency                      | OPEX / UX  | Caching, local model fallback, streaming partial responses                           |
+| One DB for boards & mail data           | Heavy load | Split read replicas; move board attachments to S3                                    |
+
+# Appendix
+
+* **Benchmarks** – Trello drag latency target < 50 ms @ 500 cards.
+* **Libraries** – react-beautiful-dnd, Tremor Gantt, react-pdf, zod, lucide-react.
+* **Coding Standards** – Conventional Commits, ESLint / Prettier, Playwright e2e, Husky pre-push type-check.
+* **Cost Model** – Board features are token-free; expected infra ≈ €20–25/month excluding optional GPU hours.
+
+</PRD>

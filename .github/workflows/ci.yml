@@ -18,7 +18,9 @@ jobs:
         with:
           node-version: 20 # Specify your project's Node.js version
           cache: "npm"
-          cache-dependency-path: grid-brain-frontend/package-lock.json # Path to lock file relative to repo root
+          cache-dependency-path: |
+            grid-brain-frontend/package.json
+            grid-brain-frontend/package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@v5

@@ -1,5 +1,8 @@
 # Grid Brain Backend
 
+[![Python Coverage](https://img.shields.io/badge/coverage-pending-lightgrey)](<!-- URL to Python coverage report -->)
+[![Frontend Coverage](https://img.shields.io/badge/frontend_coverage-pending-lightgrey)](<!-- URL to Frontend coverage report -->)
+
 Il sistema AI che funge da "quinto socio" per The Grid Company, osservando, apprendendo e guidando proattivamente il team.
 
 ## 🚀 Quick Start
@@ -113,6 +116,12 @@ the-grid-advisor/
 - AI suggestion tracking
 
 ## 🧪 Testing
+
+Python tests are written using [pytest](https://docs.pytest.org).
+
+Configuration for pytest (test paths, default options, coverage settings) can be found in `pytest.ini` at the project root.
+
+Tests should be placed in the `tests/` directory, mirroring the structure of the `app/` directory (e.g., tests for `app/core/config.py` go into `tests/core/test_config.py`).
 
 Run the test suite:
 

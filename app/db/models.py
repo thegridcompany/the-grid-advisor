@@ -257,4 +257,99 @@ class ClientHealth(BaseDBModel):
     # Recommendations
     recommended_actions: List[str] = Field(default_factory=list)
     
-    metadata: Dict[str, Any] = Field(default_factory=dict) 
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class UserRole(str, Enum):
+    """Application user roles."""
+    CONSULTANT_PO = "consultant_po"
+    DEVELOPER = "developer"
+    TECH_LEAD = "tech_lead"
+    PARTNER_CFO = "partner_cfo"
+    CLIENT = "client"
+
+
+class User(BaseDBModel):
+    """Application user model."""
+    username: str = Field(unique=True, index=True)
+    email: EmailStr = Field(unique=True, index=True)
+    hashed_password: str
+    role: UserRole
+    is_active: bool = Field(default=True)
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    
+    # Timestamps will be inherited from BaseDBModel
+    # id will be inherited from BaseDBModel 
+
+
+class Project(BaseDBModel):
+    """Project model."""
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    owner_id: Optional[UUID] = None  # Foreign Key to User.id
+
+
+class Epic(BaseDBModel):
+    """Epic model."""
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    project_id: UUID  # Foreign Key to Project.id
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    status: Optional[str] = Field("open", max_length=50)  # e.g., open, in_progress, completed
+
+
+class TicketStatus(str, Enum):
+    """Ticket status options."""
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    REVIEW = "review"
+    CLOSED = "closed"
+    BACKLOG = "backlog"
+
+
+class TicketPriority(str, Enum):
+    """Ticket priority options."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class Ticket(BaseDBModel):
+    """Ticket model."""
+    title: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    status: TicketStatus = Field(default=TicketStatus.BACKLOG)
+    priority: TicketPriority = Field(default=TicketPriority.MEDIUM)
+    project_id: UUID  # Foreign Key to Project.id
+    epic_id: Optional[UUID] = None  # Optional Foreign Key to Epic.id
+    sprint_id: Optional[UUID] = None  # Optional Foreign Key to Sprint.id
+    assignee_id: Optional[UUID] = None  # Optional Foreign Key to User.id
+    reporter_id: Optional[UUID] = None  # Optional Foreign Key to User.id
+    due_date: Optional[datetime] = None
+    estimated_hours: Optional[float] = None
+    actual_hours: Optional[float] = None
+    tags: List[str] = Field(default_factory=list)
+    embeddings: Optional[List[float]] = None # For pgvector
+
+
+class Sprint(BaseDBModel):
+    """Sprint model."""
+    name: str = Field(..., min_length=1, max_length=255)
+    project_id: UUID  # Foreign Key to Project.id
+    start_date: datetime
+    end_date: datetime
+    goal: Optional[str] = None
+    status: Optional[str] = Field("planned", max_length=50)  # e.g., planned, active, completed
+
+
+class Comment(BaseDBModel):
+    """Comment model."""
+    content: str
+    ticket_id: UUID  # Foreign Key to Ticket.id
+    user_id: UUID  # Foreign Key to User.id
+    parent_comment_id: Optional[UUID] = None # For threaded comments 

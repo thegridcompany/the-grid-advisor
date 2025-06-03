@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount the local code into the container for development
+      # This allows for hot-reloading if your dev server supports it
+      - ./:/app
+      # Use anonymous volumes for node_modules and .next to keep them isolated
+      # in the container and avoid conflicts with host node_modules or build artifacts.
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+    # If you need to ensure the app waits for a DB or other service, use depends_on
+    # depends_on:
+    #   - some-service
+# If you have other services like a backend or database, define them here
+# volumes:
+#   db_data: # Example of a named volume for persisting database data

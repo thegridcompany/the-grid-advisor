@@ -10,14 +10,17 @@ import secrets
 import pendulum
 import asyncio
 from functools import partial
+from passlib.context import CryptContext
 
 from ..core.database import get_db_manager, get_supabase
 from ..core.config import settings
 from ..core.logging import get_logger
 from ..email.client import EmailClient
-from ..db.models import TeamMember
+from ..db.models import TeamMember, User, UserRole
 
 logger = get_logger(__name__)
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class AuthService:
@@ -209,6 +212,22 @@ class AuthService:
         
         return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
     
+    def _generate_access_token_for_user(self, user: User) -> str:
+        """Generate access JWT token for a User."""
+        expires_at = datetime.utcnow() + timedelta(hours=settings.jwt_expiration_hours)
+        
+        payload = {
+            "sub": str(user.id),
+            "email": user.email,
+            "username": user.username,
+            "role": user.role.value,
+            "type": "access",
+            "exp": expires_at,
+            "iat": datetime.utcnow()
+        }
+        
+        return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    
     async def _get_team_member_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get team member by email."""
         members = await self.db.get_many(
@@ -355,4 +374,122 @@ Grid Brain AI
             return {
                 "status": "error",
                 "message": "Failed to create team member"
-            } 
+            }
+    
+    async def register_user(self, username: str, email: str, password: str, role: UserRole, first_name: Optional[str] = None, last_name: Optional[str] = None) -> Dict[str, Any]:
+        """Register a new application user."""
+        try:
+            # Validate email
+            validated = validate_email(email)
+            email_to_save = validated.email
+
+            # Check if user already exists by email or username
+            existing_by_email = await self.db.get_many("users", filters={"email": email_to_save})
+            if existing_by_email:
+                return {"status": "error", "message": "User with this email already exists"}
+            
+            existing_by_username = await self.db.get_many("users", filters={"username": username})
+            if existing_by_username:
+                return {"status": "error", "message": "User with this username already exists"}
+
+            hashed_password = pwd_context.hash(password)
+            
+            user_data = {
+                "username": username,
+                "email": email_to_save,
+                "hashed_password": hashed_password,
+                "role": role.value,
+                "is_active": True,
+                "first_name": first_name,
+                "last_name": last_name,
+            }
+            
+            # Assuming self.db.create can handle direct dicts for table "users"
+            # and returns the created user dict or User model instance
+            created_user_dict = await self.db.create("users", user_data) 
+            
+            # Ensure created_user_dict has an 'id' before creating a User model instance from it
+            # The actual structure of created_user_dict depends on your db_manager implementation
+            if not created_user_dict or "id" not in created_user_dict:
+                 logger.error(f"User creation in DB failed or did not return ID for {email}")
+                 return {"status": "error", "message": "User creation failed"}
+
+            logger.info(f"Registered new user: {email_to_save}")
+            return {"status": "success", "user_id": str(created_user_dict['id'])}
+
+        except Exception as e:
+            logger.error(f"Failed to register user {email}: {str(e)}", exc_info=True)
+            return {"status": "error", "message": f"Failed to register user: {str(e)}"}
+
+    async def authenticate_user(self, email: str, password: str) -> Optional[User]:
+        """Authenticate a user by email and password."""
+        users = await self.db.get_many("users", filters={"email": email})
+        if not users:
+            return None
+        
+        user_dict = users[0] # Assuming email is unique
+        
+        if not pwd_context.verify(password, user_dict.get("hashed_password")):
+            return None
+        
+        # Convert dict to User model instance
+        # Ensure all necessary fields are present in user_dict or handle missing ones
+        try:
+            # Role needs to be converted back to UserRole enum from string
+            user_dict["role"] = UserRole(user_dict["role"])
+            return User(**user_dict)
+        except Exception as e:
+            logger.error(f"Failed to parse authenticated user data for {email}: {e}")
+            return None
+
+    async def get_user_by_email(self, email: str) -> Optional[User]:
+        """Get user by email."""
+        users = await self.db.get_many("users", filters={"email": email})
+        if not users:
+            return None
+        user_dict = users[0]
+        try:
+            user_dict["role"] = UserRole(user_dict["role"])
+            return User(**user_dict)
+        except Exception as e:
+            logger.error(f"Failed to parse user data for {email}: {e}")
+            return None
+            
+    async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
+        """Get user by ID."""
+        user_dict = await self.db.get_by_id("users", str(user_id)) # Ensure ID is string for DB
+        if not user_dict:
+            return None
+        try:
+            user_dict["role"] = UserRole(user_dict["role"])
+            return User(**user_dict)
+        except Exception as e:
+            logger.error(f"Failed to parse user data for ID {user_id}: {e}")
+            return None
+
+    async def verify_user_access_token(self, token: str) -> Optional[User]:
+        """Verify access token and return User model instance."""
+        try:
+            payload = jwt.decode(
+                token,
+                settings.jwt_secret_key,
+                algorithms=[settings.jwt_algorithm]
+            )
+            user_id_str = payload.get("sub")
+            if not user_id_str:
+                return None
+            
+            user = await self.get_user_by_id(UUID(user_id_str))
+            
+            if not user or not user.is_active:
+                return None
+            
+            # Optionally, check token type if you have different types
+            # if payload.get("type") != "access":
+            #     return None
+
+            return user
+            
+        except Exception as e:
+            logger.error(f"Failed to verify user access token: {str(e)}")
+            return None 

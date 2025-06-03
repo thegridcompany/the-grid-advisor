@@ -18,7 +18,7 @@ from typing import Optional
 from .core.config import settings
 from .core.logging import setup_logging, get_logger
 from .core.database import get_supabase
-from .api import auth, email, interactions, clients, analytics, health
+from .api import auth, email, interactions, clients, analytics, health, projects, tickets, realtime
 
 # Setup logging
 setup_logging()
@@ -141,6 +141,9 @@ app.include_router(interactions.router, prefix="/api/interactions", tags=["Inter
 app.include_router(clients.router, prefix="/api/clients", tags=["Clients"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(health.router, prefix="/api/health", tags=["Health"])
+app.include_router(projects.router, prefix="/api/projects", tags=["Projects"])
+app.include_router(tickets.router, prefix="/api/tickets", tags=["Tickets"])
+app.include_router(realtime.router, prefix="/api/realtime", tags=["Real-time"])
 
 
 # Global exception handler

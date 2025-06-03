@@ -1,0 +1,30 @@
+# Ignore dependencies and build artifacts
+node_modules
+.next
+
+# Ignore Git history and configuration
+.git
+.gitignore
+
+# Ignore Docker specific files if they exist in the build context
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Ignore environment files (they should be managed outside the image)
+.env*
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore log files
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ignore test reports
+coverage
+.nyc_output 
