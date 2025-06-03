@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main] # Assuming 'main' is the primary branch
+    branches: [main, develop] # Aggiunto develop
   pull_request:
-    branches: [main] # Assuming 'main' is the primary branch
+    branches: [main, develop] # Aggiunto develop
 
 jobs:
   build_and_test:
