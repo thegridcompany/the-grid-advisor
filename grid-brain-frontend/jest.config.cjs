@@ -11,9 +11,8 @@ const customJestConfig = {
   moduleNameMapper: {
     "^@/components/(.*)$": "<rootDir>/src/components/$1",
     "^@/pages/(.*)$": "<rootDir>/src/pages/$1",
-  },
-  transform: {
-    "^.+.(ts|tsx)$": ["ts-jest", { tsconfig: "<rootDir>/tsconfig.jest.json" }],
+    "^@/lib/(.*)$": "<rootDir>/src/lib/$1",
+    "^@/(.*)$": "<rootDir>/src/$1",
   },
   collectCoverage: true,
   collectCoverageFrom: [
