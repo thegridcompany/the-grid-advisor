@@ -41,21 +41,25 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 This project uses [Jest](https://jestjs.io/) and [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/) for unit and integration tests.
 
+The project aims for a minimum of **80% code coverage**. The CI pipeline is configured to fail if the coverage drops below this threshold.
+
 ### Running Tests
 
-To run all tests, use the following command:
+To run all tests and generate a coverage report, use the following command:
 
 ```bash
 npm test
 ```
 
-To run tests in watch mode (useful during development):
+This command (as configured in `package.json`) runs Jest with the `--coverage` flag. An HTML coverage report will be generated in the `coverage/` directory. Open `coverage/index.html` in your browser to view the detailed report.
+
+To run tests in watch mode (useful during development, does not generate coverage by default):
 
 ```bash
 npm run test:watch
 ```
 
-(Note: You may need to add `"test": "jest"` and `"test:watch": "jest --watch"` scripts to your `package.json` if they don't exist yet.)
+(Note: The `test` and `test:watch` scripts are already configured in your `package.json`.)
 
 ### Writing Tests
 

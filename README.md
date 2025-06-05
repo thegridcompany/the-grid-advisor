@@ -123,6 +123,8 @@ Configuration for pytest (test paths, default options, coverage settings) can be
 
 Tests should be placed in the `tests/` directory, mirroring the structure of the `app/` directory (e.g., tests for `app/core/config.py` go into `tests/core/test_config.py`).
 
+The project aims for a minimum of **85% code coverage** for the Python backend. The CI pipeline is configured to fail if the coverage drops below this threshold.
+
 Run the test suite:
 
 ```bash
@@ -134,6 +136,16 @@ Run with coverage:
 ```bash
 pytest --cov=app tests/
 ```
+
+After running tests with coverage, an HTML report is generated in the `htmlcov/` directory. Open `htmlcov/index.html` in your browser to view the detailed coverage report.
+
+### Frontend Testing (Next.js/Jest)
+
+Frontend tests for the `grid-brain-frontend` application are managed within its own directory. This project uses Jest and React Testing Library.
+
+The target code coverage for the frontend is **80%**. The CI pipeline will also enforce this threshold.
+
+For detailed instructions on running frontend tests, viewing coverage reports, and testing conventions, please refer to the [grid-brain-frontend/README.md](grid-brain-frontend/README.md) file.
 
 ## 📊 Database
 
