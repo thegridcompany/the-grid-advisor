@@ -17,11 +17,11 @@ export function LoginForm() {
   const login = useAuthStore((state) => state.login);
   const isLoading = useAuthStore((state) => state.isLoading);
   const error = useAuthStore((state) => state.error);
-  const clearError = useAuthStore((state) => state.setError); // To clear previous errors
+  const clearError = useAuthStore((state) => state.clearError); // To clear previous errors
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    clearError(null); // Clear previous errors before new attempt
+    clearError(); // Clear previous errors before new attempt
     try {
       await login(email, password);
       // Handle successful login, e.g., redirect to dashboard

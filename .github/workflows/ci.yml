@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20 # Specify your project's Node.js version
+          node-version: 23 # Updated to match local environment
           cache: "npm"
           cache-dependency-path: |
             grid-brain-frontend/package.json
@@ -37,6 +37,21 @@ jobs:
       - name: Install frontend dependencies
         working-directory: ./grid-brain-frontend # Assuming monorepo structure where package.json is in a subdirectory
         run: npm ci
+
+      - name: Debug Node.js and TypeScript configuration
+        working-directory: ./grid-brain-frontend
+        run: |
+          echo "=== Node.js and npm versions ==="
+          node --version
+          npm --version
+          echo "=== TypeScript configuration ==="
+          cat tsconfig.json
+          echo "=== Check if @/lib/utils file exists ==="
+          ls -la src/lib/utils.ts
+          echo "=== PWD ==="
+          pwd
+          echo "=== Directory structure ==="
+          find src -name "*.ts" -o -name "*.tsx" | head -10
 
       - name: Run Frontend Linters
         working-directory: ./grid-brain-frontend
