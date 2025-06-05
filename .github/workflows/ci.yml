@@ -49,7 +49,7 @@ jobs:
       - name: Run Backend Tests (Python)
         run: |
           source venv/bin/activate
-          pytest
+          PYTHONPATH=. pytest
 
       - name: Build Frontend
         working-directory: ./grid-brain-frontend
