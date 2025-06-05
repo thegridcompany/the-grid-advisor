@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, AlertTriangle, CheckCircle } from "lucide-react";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost:8000";
 
-export default function VerifyPage() {
+function VerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
@@ -68,7 +68,7 @@ export default function VerifyPage() {
     };
 
     verifyToken();
-  }, [token, router]);
+  }, [token, router, message]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 text-center">
@@ -105,5 +105,21 @@ export default function VerifyPage() {
           </p>
       </div>
     </div>
+  );
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 text-center">
+        <div className="w-full max-w-md space-y-6 rounded-lg bg-card p-8 shadow-xl">
+          <Loader2 className="mx-auto h-12 w-12 animate-spin text-brandOrange" />
+          <h1 className="text-2xl font-semibold text-foreground">Loading...</h1>
+          <p className="text-muted-foreground">Preparing verification...</p>
+        </div>
+      </div>
+    }>
+      <VerifyContent />
+    </Suspense>
   );
 } 
