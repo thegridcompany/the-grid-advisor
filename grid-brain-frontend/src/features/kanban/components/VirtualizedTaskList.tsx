@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { SortableContext } from '@dnd-kit/sortable';
+import { FixedSizeList as List, ListChildComponentProps } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 
 import { KanbanTaskCard } from './KanbanTaskCard';
 import { Task } from '../types';
@@ -12,55 +12,61 @@ interface VirtualizedTaskListProps {
   taskIds: string[];
   searchQuery?: string;
   focusedTaskId?: string | null;
+  onEditTask: (task: Task) => void;
+  onDeleteTask: (taskId: string) => void;
 }
 
-export const VirtualizedTaskList: React.FC<VirtualizedTaskListProps> = ({ tasks, taskIds, searchQuery, focusedTaskId }) => {
-  const parentRef = React.useRef<HTMLDivElement>(null);
+const Row = ({ index, style, data }: ListChildComponentProps<{
+  tasks: Task[];
+  taskIds: string[];
+  searchQuery?: string;
+  focusedTaskId?: string | null;
+  onEditTask: (task: Task) => void;
+  onDeleteTask: (taskId: string) => void;
+}>) => {
+  const { tasks, taskIds, searchQuery, focusedTaskId, onEditTask, onDeleteTask } = data;
+  const taskId = taskIds[index];
+  const task = tasks.find((t: Task) => t.id === taskId);
 
-  const rowVirtualizer = useVirtualizer({
-    count: tasks.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 110, // Estimate size of a task card (p-3, title, desc, meta) -> approx 100-120px
-    overscan: 5,
-  });
+  if (!task) return null;
 
   return (
-    <div ref={parentRef} className="h-full overflow-y-auto">
-      <div
-        style={{
-          height: `${rowVirtualizer.getTotalSize()}px`,
-          width: '100%',
-          position: 'relative',
-        }}
-      >
-        <SortableContext items={taskIds} strategy={() => null}>
-          {rowVirtualizer.getVirtualItems().map((virtualItem) => {
-            const task = tasks[virtualItem.index];
-            if (!task) {
-              return null;
-            }
-            return (
-              <div
-                key={task.id}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${virtualItem.start}px)`,
-                  padding: '4px',
-                }}
-              >
+    <div style={style} className="px-2 py-2">
                 <KanbanTaskCard
                   task={task}
                   searchQuery={searchQuery}
                   isFocused={focusedTaskId === task.id}
+                  onEditTask={onEditTask}
+                  onDeleteTask={onDeleteTask}
                 />
               </div>
             );
-          })}
-        </SortableContext>
-      </div>
-    </div>
+};
+
+export const VirtualizedTaskList: React.FC<VirtualizedTaskListProps> = ({
+  tasks,
+  taskIds,
+  searchQuery,
+  focusedTaskId,
+  onEditTask,
+  onDeleteTask,
+}) => {
+  const itemData = { tasks, taskIds, searchQuery, focusedTaskId, onEditTask, onDeleteTask };
+  const rowHeight = 136; // Increased from 128 to account for more padding
+
+  return (
+    <AutoSizer>
+      {({ height, width }) => (
+        <List
+          height={height}
+          width={width}
+          itemCount={taskIds.length}
+          itemSize={rowHeight}
+          itemData={itemData}
+        >
+          {Row}
+        </List>
+      )}
+    </AutoSizer>
   );
 }; 

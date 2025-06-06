@@ -8,6 +8,7 @@ import { TaskCounter } from './atoms/TaskCounter';
 import { useKanbanDispatch } from '../state/kanbanContext';
 import { DragHandle } from './atoms/DragHandle';
 import { VirtualizedTaskList } from './VirtualizedTaskList';
+import { XIcon, PlusIcon } from './atoms/Icons';
 
 // Simple trash icon component
 const TrashIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -28,13 +29,17 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
   color,
   searchQuery,
   focusedTaskId,
+  onEditTask,
+  onDeleteTask,
 }) => {
   const { setNodeRef, isOver } = useDroppable({
     id,
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(title);
-  const { updateColumnTitle, deleteColumn, updateColumnColor } = useKanbanDispatch();
+  const { updateColumnTitle, deleteColumn, updateColumnColor, addTask } = useKanbanDispatch();
+  const [isAddingCard, setIsAddingCard] = useState(false);
+  const [newCardTitle, setNewCardTitle] = useState('');
 
   const handleTitleBlur = () => {
     if (editedTitle.trim() && editedTitle !== title) {
@@ -54,6 +59,25 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
     }
   };
 
+  const handleAddCard = async () => {
+    if (newCardTitle.trim()) {
+      await addTask({ columnId: id, title: newCardTitle.trim() });
+      setNewCardTitle('');
+      setIsAddingCard(false);
+    }
+  };
+
+  const handleAddCardKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddCard();
+    }
+    if (e.key === 'Escape') {
+      setIsAddingCard(false);
+      setNewCardTitle('');
+    }
+  };
+
   const handleDelete = () => {
     if (window.confirm(`Are you sure you want to delete the column "${title}"? This action cannot be undone.`)) {
       deleteColumn(id);
@@ -67,15 +91,16 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
   return (
     <div
       className={cn(
-        'flex flex-col bg-gray-100 dark:bg-gray-800 rounded-lg p-4 min-h-[400px] w-80',
-        'border-t-4',
-        isOver ? 'border-blue-500' : 'border-transparent',
+        'flex flex-col rounded-lg bg-[#161B22] w-[320px] h-full border border-[#30363D]',
+        'transition-all duration-200',
         className
       )}
-      style={{ borderTopColor: isOver ? undefined : color }}
     >
       {/* Column Header */}
-      <div className="mb-4 group">
+      <div 
+        className="p-3 border-b border-[#30363D] group"
+        style={{ borderTop: `3px solid ${isOver ? '#3b82f6' : color || 'transparent'}`, transition: 'border-color 0.2s' }}
+      >
         <div className="flex justify-between items-center gap-2">
           {dragHandleListeners && (
             <DragHandle listeners={dragHandleListeners} />
@@ -87,12 +112,12 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
               onBlur={handleTitleBlur}
               onKeyDown={handleKeyDown}
               autoFocus
-              className="font-semibold text-lg bg-transparent border border-blue-500 rounded-md p-1 w-full resize-none"
+              className="font-semibold text-base bg-transparent border border-blue-500 rounded-md p-1 w-full resize-none text-gray-100"
             />
           ) : (
             <h3
               onClick={() => setIsEditing(true)}
-              className="font-semibold text-lg text-gray-900 dark:text-gray-100 cursor-pointer flex-grow"
+              className="font-semibold text-base text-gray-200 cursor-pointer flex-grow"
             >
               {title}
             </h3>
@@ -101,10 +126,10 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
             <ColorPicker onChange={handleColorChange} />
             <button 
               onClick={handleDelete}
-              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600"
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-gray-700"
               aria-label="Delete column"
             >
-              <TrashIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+              <TrashIcon className="w-4 h-4 text-gray-400" />
             </button>
           </div>
         </div>
@@ -118,8 +143,9 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
       <div
         ref={setNodeRef}
         className={cn(
-          'flex-1 space-y-2 min-h-[200px] transition-colors duration-200 overflow-hidden',
-          isOver && 'bg-blue-50 dark:bg-blue-900/20 rounded-md'
+          'flex-grow overflow-hidden p-2',
+          'transition-colors duration-200',
+          isOver && 'bg-blue-900/10'
         )}
       >
         <VirtualizedTaskList 
@@ -127,7 +153,56 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
           taskIds={taskIds}
           searchQuery={searchQuery}
           focusedTaskId={focusedTaskId}
+          onEditTask={onEditTask}
+          onDeleteTask={onDeleteTask}
         />
+      </div>
+      
+      {/* Column Footer */}
+      <div className="p-2 pt-0">
+        {isAddingCard ? (
+          <div className="p-1">
+            <textarea
+              placeholder="Enter a title for this card..."
+              autoFocus
+              value={newCardTitle}
+              onChange={(e) => setNewCardTitle(e.target.value)}
+              onKeyDown={handleAddCardKeyDown}
+              onBlur={() => {
+                // Submit on blur if there's text, otherwise cancel
+                if (newCardTitle.trim()) {
+                  handleAddCard();
+                } else {
+                  setIsAddingCard(false);
+                }
+              }}
+              className="w-full bg-gray-900 rounded-md p-2 text-sm text-gray-200 placeholder-gray-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div className="flex items-center gap-2 mt-2">
+              <button 
+                onClick={handleAddCard}
+                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Add card
+              </button>
+              <button 
+                onClick={() => setIsAddingCard(false)}
+                className="p-1.5 rounded-md hover:bg-gray-700"
+                aria-label="Cancel adding card"
+              >
+                <XIcon className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button 
+            onClick={() => setIsAddingCard(true)}
+            className="w-full flex items-center gap-2 rounded-md p-2 text-sm text-gray-400 hover:bg-gray-700 hover:text-gray-200 transition-colors"
+          >
+            <PlusIcon className="w-4 h-4" />
+            Add a card
+          </button>
+        )}
       </div>
     </div>
   );
@@ -141,11 +216,11 @@ const ColorPicker = ({ onChange }: { onChange: (color: string) => void }) => {
 
   return (
     <div className="relative">
-      <button onClick={() => setIsOpen(!isOpen)} className="p-1 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600">
-        <PaletteIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+      <button onClick={() => setIsOpen(!isOpen)} className="p-1 rounded-md hover:bg-gray-700">
+        <PaletteIcon className="w-4 h-4 text-gray-400" />
       </button>
       {isOpen && (
-        <div className="absolute z-10 top-full right-0 mt-2 p-2 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700">
+        <div className="absolute z-10 top-full right-0 mt-2 p-2 bg-gray-800 rounded-md shadow-lg border border-gray-700">
           <div className="flex flex-wrap gap-2 w-24">
             {colors.map(color => (
               <button

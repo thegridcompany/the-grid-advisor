@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "sonner";
+import "@/components/ui/scrollbar.css";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -26,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${montserrat.variable} font-sans antialiased`}
+        className={`${inter.variable} ${montserrat.variable} font-sans antialiased custom-scrollbar`}
         suppressHydrationWarning
       >
         <ThemeProvider
@@ -36,6 +38,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

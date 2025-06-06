@@ -1,0 +1,19 @@
+/* In a global CSS file or a style block */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #21262d; /* Dark track, matching card background */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #484f58; /* A slightly lighter, neutral grey */
+  border-radius: 4px;
+  border: 2px solid #21262d; /* Creates a nice padding effect */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #6e7681; /* Lighter grey on hover */
+} 

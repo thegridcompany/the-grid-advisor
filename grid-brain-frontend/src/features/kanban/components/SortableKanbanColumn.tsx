@@ -12,9 +12,11 @@ interface SortableKanbanColumnProps {
   searchQuery?: string;
   isFocused?: boolean;
   focusedTaskId?: string | null;
+  onEditTask: (task: Task) => void;
+  onDeleteTask: (taskId: string) => void;
 }
 
-export const SortableKanbanColumn: React.FC<SortableKanbanColumnProps> = ({ column, tasks, searchQuery, isFocused, focusedTaskId }) => {
+export const SortableKanbanColumn: React.FC<SortableKanbanColumnProps> = ({ column, tasks, searchQuery, isFocused, focusedTaskId, onEditTask, onDeleteTask }) => {
   const {
     attributes,
     listeners,
@@ -49,7 +51,9 @@ export const SortableKanbanColumn: React.FC<SortableKanbanColumnProps> = ({ colu
         dragHandleListeners={listeners}
         searchQuery={searchQuery}
         focusedTaskId={focusedTaskId}
-        className={isFocused ? 'ring-2 ring-blue-500' : ''}
+        className={isFocused ? 'ring-2 ring-offset-2 ring-offset-[#0D1117] ring-blue-500' : ''}
+        onEditTask={onEditTask}
+        onDeleteTask={onDeleteTask}
       />
     </div>
   );

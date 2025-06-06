@@ -51,6 +51,9 @@ export interface KanbanColumnProps {
   dragHandleListeners?: Record<string, unknown>;
   searchQuery?: string;
   focusedTaskId?: string | null;
+  isFocused?: boolean;
+  onEditTask: (task: Task) => void;
+  onDeleteTask: (taskId: string) => void;
 }
 
 export interface KanbanTaskCardProps {
@@ -60,6 +63,8 @@ export interface KanbanTaskCardProps {
   onClick?: (task: Task) => void;
   searchQuery?: string;
   isFocused?: boolean;
+  onEditTask: (task: Task) => void;
+  onDeleteTask: (taskId: string) => void;
 }
 
 // Drag and drop event types
@@ -148,6 +153,13 @@ export type KanbanAction =
       };
     }
   | {
+      type: "ADD_TASK";
+      payload: {
+        columnId: string;
+        newTask: Task;
+      };
+    }
+  | {
       type: "UPDATE_COLUMN_COLOR";
       payload: {
         columnId: string;
@@ -200,4 +212,18 @@ export type KanbanAction =
       payload: {
         newColumnOrder: string[];
       };
+    }
+  | {
+      type: "UPDATE_TASK";
+      payload: {
+        updatedTask: Task;
+      };
+    }
+  | {
+      type: "DELETE_TASK";
+      payload: {
+        taskId: string;
+      };
     };
+
+export type KanbanDispatch = (action: KanbanAction) => void;

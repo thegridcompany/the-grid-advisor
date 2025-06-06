@@ -14,6 +14,7 @@ import { useKanbanState, useKanbanDispatch } from '../state/kanbanContext';
 import { useIsClient } from '@/hooks/useIsClient'; // Import the new hook
 import { useHotkeys } from '@/hooks/useHotkeys';
 import { cn } from '@/lib/utils';
+import { EditTaskModal } from './EditTaskModal';
 
 const LazyFilterPanel = lazy(() =>
   import('./FilterPanel').then(module => ({ default: module.FilterPanel }))
@@ -83,7 +84,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   className 
 }) => {
   const { tasks, columns, columnOrder, isLoading: isLoadingState } = useKanbanState();
-  const { moveTask, addColumn, moveColumn } = useKanbanDispatch();
+  const { moveTask, addColumn, moveColumn, updateTask, deleteTask } = useKanbanDispatch();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [activeColumn, setActiveColumn] = useState<Column | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -92,6 +93,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [focusedId, setFocusedId] = useState<string | null>(columnOrder[0] || null);
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [isDragInProgress, setIsDragInProgress] = useState(false); // Prevent double drag events
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const isClient = useIsClient(); // Use the hook
 
   const isLoading = isLoadingProp !== undefined ? isLoadingProp : isLoadingState;
@@ -267,6 +269,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     // if (onTaskMove) { ... }
   };
 
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+  };
+  
+  const handleSaveTask = (updatedTask: Task) => {
+    updateTask(updatedTask);
+    setEditingTask(null);
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    deleteTask(taskId);
+  };
+
   if (isLoading) {
     return <div className="p-6 text-center">Loading Kanban board...</div>;
   }
@@ -308,6 +323,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 searchQuery={searchQuery}
                 isFocused={focusedId === column.id}
                 focusedTaskId={focusedTaskId}
+                onEditTask={handleEditTask}
+                onDeleteTask={handleDeleteTask}
               />
             );
           })}
@@ -339,59 +356,64 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   return (
     <KanbanContextContainer onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className={cn("p-6", className)}>
+      <div className={cn("flex flex-col h-screen bg-[#0D1117] text-white", className)}>
+        <div className="p-4 sm:p-6">
         <KanbanToolbar 
           onSearch={handleSearch} 
           onFilter={handleFilter}
           onAddNewColumn={handleAddNewColumn} 
           filterActive={Object.keys(filters).length > 0}
         />
-        <Suspense fallback={<div>Loading...</div>}>
+        </div>
+        <Suspense fallback={<div className="px-6">Loading filters...</div>}>
           {isFilterPanelOpen && <LazyFilterPanel onApplyFilters={handleApplyFilters} initialFilters={filters} onClose={() => setIsFilterPanelOpen(false)} />}
         </Suspense>
-        <div className="flex gap-4 overflow-x-auto mt-4 pb-4">
+        <div className="flex-grow flex flex-nowrap gap-4 overflow-x-auto px-4 sm:px-6 pb-4">
           <SortableContext items={columnOrder} strategy={horizontalListSortingStrategy}>
-            {columnOrder.map(columnId => {
-              const column = columns[columnId];
-              if (!column) {
-                console.warn(`Column with id ${columnId} not found in columns object.`);
-                return null;
-              }
+            {columnOrder.map((colId) => {
+              const column = columns[colId];
+              if (!column) return null;
               const columnTasks = column.taskIds.map(taskId => tasks[taskId]).filter(Boolean);
-              
-              const filteredTasks = columnTasks.filter(task => 
-                task.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-                (Object.keys(filters).length === 0 || 
-                  (filters.priority ? task.priority === filters.priority : true)
-                  // Add other filters here
-                )
-              );
 
               return (
-                <SortableKanbanColumn 
-                  key={column.id} 
-                  column={column} 
-                  tasks={filteredTasks} 
+                <SortableKanbanColumn
+                  key={column.id}
+                  column={column}
+                  tasks={columnTasks}
                   searchQuery={searchQuery}
                   isFocused={focusedId === column.id}
-                  focusedTaskId={focusedTaskId}
+                  focusedTaskId={focusedId === column.id ? focusedTaskId : null}
+                  onEditTask={handleEditTask}
+                  onDeleteTask={handleDeleteTask}
                 />
               );
             })}
           </SortableContext>
+          <div className="flex-grow"></div>
         </div>
 
         <DragOverlay>
-          {activeTask && <KanbanTaskCard task={activeTask} />}
+          {activeTask && <KanbanTaskCard task={activeTask} onEditTask={() => {}} onDeleteTask={() => {}} />}
           {activeColumn && (
             <KanbanColumn
               id={activeColumn.id}
               title={activeColumn.title}
               taskIds={activeColumn.taskIds}
               tasks={activeColumn.taskIds.map(id => tasks[id])}
+              onEditTask={() => {}}
+              onDeleteTask={() => {}}
             />
           )}
         </DragOverlay>
+
+        {editingTask && (
+          <EditTaskModal
+            isOpen={!!editingTask}
+            task={editingTask}
+            onClose={() => setEditingTask(null)}
+            onSave={handleSaveTask}
+          />
+        )}
       </div>
     </KanbanContextContainer>
   );
