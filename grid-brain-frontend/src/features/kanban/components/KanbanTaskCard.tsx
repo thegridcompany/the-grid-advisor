@@ -31,6 +31,7 @@ const KanbanTaskCardComponent: React.FC<KanbanTaskCardProps> = ({
       type: 'Task',
       task,
     },
+    disabled: isFocused,
   });
 
   const style = {
@@ -49,8 +50,8 @@ const KanbanTaskCardComponent: React.FC<KanbanTaskCardProps> = ({
       ref={setNodeRef}
       style={style}
       className={cn(
-        'bg-[#21262D] border border-[#30363D] rounded-lg p-3 shadow-sm hover:shadow-lg transition-shadow duration-200 cursor-pointer',
-        'h-full flex flex-col relative group',
+        'bg-[#21262D] border border-[#30363D] rounded-lg shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer',
+        'flex flex-col relative group overflow-hidden',
         'border-l-4',
         task.priority ? priorityColors[task.priority] : 'border-l-gray-400',
         isDragging && 'opacity-50 rotate-3 scale-105',
@@ -59,63 +60,75 @@ const KanbanTaskCardComponent: React.FC<KanbanTaskCardProps> = ({
       )}
       {...attributes}
     >
-      <div className="flex items-start gap-3 h-full">
-        <DragHandle
-          ariaLabel={`Drag task: ${task.title}`}
-          listeners={listeners}
-          className="pt-1 text-gray-400"
-        />
-
-        <div className="flex flex-col flex-1 min-w-0 h-full">
-          <div className="flex-grow">
-            <h4 className="font-medium text-gray-200 text-sm">
+      {/* Header con titolo e icone CRUD */}
+      <div className="flex items-start justify-between gap-2 p-3 pb-2">
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          <DragHandle
+            ariaLabel={`Drag task: ${task.title}`}
+            listeners={listeners}
+            className="mt-0.5 text-gray-400 flex-shrink-0"
+          />
+          <div className="min-w-0 flex-1">
+            <h4 className="font-medium text-gray-200 text-sm leading-tight">
               <Highlight text={task.title} query={searchQuery || ''} />
             </h4>
+          </div>
+        </div>
+        
+        {/* Icone CRUD sempre visibili su mobile, hover su desktop */}
+        <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200 flex-shrink-0">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEditTask(task);
+            }}
+            className="p-1.5 rounded-md hover:bg-gray-700 transition-colors"
+            title="Edit task"
+          >
+            <PencilIcon className="w-3.5 h-3.5 text-gray-400 hover:text-gray-200" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteTask(task.id);
+            }}
+            className="p-1.5 rounded-md hover:bg-red-900/50 transition-colors"
+            title="Delete task"
+          >
+            <Trash2Icon className="w-3.5 h-3.5 text-gray-400 hover:text-red-400" />
+          </button>
+        </div>
+      </div>
 
-            {task.description && (
-              <p className="text-xs text-gray-400 mt-1.5 line-clamp-3">
-                {task.description}
-              </p>
+      {/* Descrizione */}
+      {task.description && (
+        <div className="px-3 pb-2">
+          <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
+            {task.description}
+          </p>
+        </div>
+      )}
+
+      {/* Footer con metadata */}
+      <div className="px-3 pb-3 mt-auto">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3 text-gray-500 min-w-0">
+            <div className="flex items-center gap-1">
+              <HashIcon className="w-3 h-3 flex-shrink-0" />
+              <span className="text-xs font-mono">{task.id}</span>
+            </div>
+            {task.assignee && (
+              <div className="flex items-center gap-1 min-w-0">
+                <UsersIcon className="w-3 h-3 flex-shrink-0" />
+                <span className="text-xs truncate">{task.assignee}</span>
+              </div>
             )}
           </div>
-
-          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-            <button
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent card drag
-                onEditTask(task);
-              }}
-              className="p-1 rounded-md hover:bg-gray-700"
-            >
-              <PencilIcon className="w-4 h-4 text-gray-400" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation(); // Prevent card drag
-                onDeleteTask(task.id);
-              }}
-              className="p-1 rounded-md hover:bg-red-900/50"
-            >
-              <Trash2Icon className="w-4 h-4 text-gray-400 hover:text-red-400" />
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center gap-3 text-gray-500">
-              <div className="flex items-center gap-1">
-                <HashIcon className="w-3 h-3" />
-                <span className="text-xs font-mono">{task.id}</span>
-              </div>
-              {task.assignee && (
-                <div className="flex items-center gap-1">
-                  <UsersIcon className="w-3 h-3" />
-                  <span className="text-xs">{task.assignee}</span>
-                </div>
-              )}
+          {task.priority && (
+            <div className="flex-shrink-0">
+              <PriorityBadge priority={task.priority} />
             </div>
-
-            {task.priority && <PriorityBadge priority={task.priority} />}
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     """Application settings."""
+    # Forcing a reload to fix a potential caching issue with Pydantic settings
     
     # Application
     app_name: str = Field(default="Grid Brain", env="APP_NAME")
@@ -36,6 +37,8 @@ class Settings(BaseSettings):
     # AI Services
     anthropic_api_key: str = Field(..., env="ANTHROPIC_API_KEY")
     openai_api_key: str = Field(..., env="OPENAI_API_KEY")
+    perplexity_api_key: Optional[str] = Field(default=None, env="PERPLEXITY_API_KEY")
+    openrouter_api_key: Optional[str] = Field(default=None, env="OPENROUTER_API_KEY")
     ai_model_name: str = Field(default="claude-3-opus-20240229", env="AI_MODEL_NAME")
     embedding_model: str = Field(default="text-embedding-3-small", env="EMBEDDING_MODEL")
     ai_analysis_threshold: float = Field(default=0.8, env="AI_ANALYSIS_THRESHOLD")
@@ -83,6 +86,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"
         
     @validator("environment")
     def validate_environment(cls, v):

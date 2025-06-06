@@ -7,7 +7,8 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from uuid import UUID
 
-from .auth import get_current_user
+from .auth import get_current_active_user
+from ..db.models import User
 from ..core.database import get_db_manager
 from ..core.logging import get_logger
 
@@ -37,7 +38,7 @@ class CreateClientRequest(BaseModel):
 
 @router.get("/", response_model=List[ClientResponse])
 async def get_clients(
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     status: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     limit: int = Query(50, le=100),
@@ -66,7 +67,7 @@ async def get_clients(
 @router.get("/{client_id}")
 async def get_client(
     client_id: UUID,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Get specific client details."""
     db = get_db_manager()
@@ -82,7 +83,7 @@ async def get_client(
 @router.post("/", response_model=ClientResponse)
 async def create_client(
     request: CreateClientRequest,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Create a new client."""
     db = get_db_manager()
@@ -111,7 +112,7 @@ async def create_client(
 async def update_client(
     client_id: UUID,
     request: CreateClientRequest,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Update client information."""
     db = get_db_manager()
@@ -129,7 +130,7 @@ async def update_client(
 @router.get("/{client_id}/health")
 async def get_client_health(
     client_id: UUID,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Get client health metrics."""
     db = get_db_manager()
@@ -155,7 +156,7 @@ async def get_client_health(
 @router.get("/{client_id}/interactions")
 async def get_client_interactions(
     client_id: UUID,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     limit: int = Query(20, le=100)
 ):
     """Get recent interactions with client."""

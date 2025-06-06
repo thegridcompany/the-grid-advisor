@@ -260,6 +260,41 @@ class ClientHealth(BaseDBModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
+class KanbanStatus(str, Enum):
+    """Kanban task status options."""
+    TODO = "todo"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+
+
+class KanbanPriority(str, Enum):
+    """Kanban task priority options."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class KanbanColumn(BaseDBModel):
+    """Kanban column model."""
+    name: str
+    project_id: UUID  # Foreign Key to Project.id
+    position: int = Field(..., ge=0)
+
+
+class KanbanTask(BaseDBModel):
+    """Kanban task model."""
+    title: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    status: KanbanStatus = Field(default=KanbanStatus.TODO)
+    priority: KanbanPriority = Field(default=KanbanPriority.MEDIUM)
+    column_id: UUID  # Foreign Key to KanbanColumn.id
+    assignee_id: Optional[UUID] = None  # Foreign Key to User.id
+    reporter_id: Optional[UUID] = None  # Foreign Key to User.id
+    due_date: Optional[datetime] = None
+    tags: List[str] = Field(default_factory=list)
+    position: int = Field(..., ge=0)
+
+
 class UserRole(str, Enum):
     """Application user roles."""
     CONSULTANT_PO = "consultant_po"

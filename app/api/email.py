@@ -6,7 +6,8 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 
-from .auth import get_current_user
+from .auth import get_current_active_user
+from ..db.models import User
 from ..email.service import EmailService
 from ..core.logging import get_logger
 
@@ -30,12 +31,12 @@ class SyncEmailsResponse(BaseModel):
 @router.post("/setup-account")
 async def setup_email_account(
     request: EmailAccountSetupRequest,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Set up email account for current user."""
     result = await email_service.setup_email_account(
-        team_member_id=UUID(current_user["id"]),
-        email_address=current_user["email"],
+        team_member_id=current_user.id,
+        email_address=current_user.email,
         password=request.password
     )
     
@@ -48,13 +49,13 @@ async def setup_email_account(
 @router.post("/sync", response_model=SyncEmailsResponse)
 async def sync_emails(
     background_tasks: BackgroundTasks,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Sync emails for current user."""
     # Run sync in background
     background_tasks.add_task(
         email_service.sync_team_member_emails,
-        UUID(current_user["id"])
+        current_user.id
     )
     
     return {
@@ -68,7 +69,7 @@ async def sync_emails(
 @router.post("/sync-all")
 async def sync_all_emails(
     background_tasks: BackgroundTasks,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Sync emails for all team members (admin only)."""
     # TODO: Add admin role check
@@ -84,7 +85,7 @@ async def sync_all_emails(
 
 @router.get("/sync-status")
 async def get_sync_status(
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Get email sync status for current user."""
     from ..core.database import get_db_manager
@@ -94,7 +95,7 @@ async def get_sync_status(
     # Get email account status
     accounts = await db.get_many(
         "email_accounts",
-        filters={"team_member_id": current_user["id"]}
+        filters={"team_member_id": current_user.id}
     )
     
     if not accounts:

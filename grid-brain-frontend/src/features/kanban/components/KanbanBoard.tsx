@@ -1,6 +1,7 @@
+// This is the main Kanban Board component. It orchestrates all the state and actions.
 'use client';
 
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState, Suspense, lazy, useMemo } from 'react';
 import { DragEndEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 // import { arrayMove } from '@dnd-kit/sortable'; // This logic will move to the reducer
@@ -10,11 +11,21 @@ import { KanbanTaskCard } from './KanbanTaskCard';
 import { SortableKanbanColumn } from './SortableKanbanColumn';
 import { KanbanToolbar } from './KanbanToolbar';
 import { Task, Column, KanbanBoardProps } from '../types'; // Added Column back
+
+interface Command {
+  id: string;
+  label: string;
+  action: () => void;
+  hotkey?: string;
+  disabled?: boolean;
+}
+
 import { useKanbanState, useKanbanDispatch } from '../state/kanbanContext';
 import { useIsClient } from '@/hooks/useIsClient'; // Import the new hook
 import { useHotkeys } from '@/hooks/useHotkeys';
 import { cn } from '@/lib/utils';
 import { EditTaskModal } from './EditTaskModal';
+import { CommandPalette } from './CommandPalette';
 
 const LazyFilterPanel = lazy(() =>
   import('./FilterPanel').then(module => ({ default: module.FilterPanel }))
@@ -84,7 +95,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   className 
 }) => {
   const { tasks, columns, columnOrder, isLoading: isLoadingState } = useKanbanState();
-  const { moveTask, addColumn, moveColumn, updateTask, deleteTask } = useKanbanDispatch();
+  const { moveTask, addColumn, moveColumn, updateTask, deleteTask, deleteColumn } = useKanbanDispatch();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [activeColumn, setActiveColumn] = useState<Column | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -94,51 +105,29 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null);
   const [isDragInProgress, setIsDragInProgress] = useState(false); // Prevent double drag events
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [addingTaskInColumn, setAddingTaskInColumn] = useState<string | null>(null);
   const isClient = useIsClient(); // Use the hook
 
   const isLoading = isLoadingProp !== undefined ? isLoadingProp : isLoadingState;
 
-  useHotkeys([
-    ['ArrowRight', () => {
-      if (!focusedId) return;
-      const index = columnOrder.indexOf(focusedId);
-      if (index > -1 && index < columnOrder.length - 1) {
-        setFocusedId(columnOrder[index + 1]);
-        setFocusedTaskId(null); // Reset task focus when changing column
-      }
-    }],
-    ['ArrowLeft', () => {
-      if (!focusedId) return;
-      const index = columnOrder.indexOf(focusedId);
-      if (index > 0) {
-        setFocusedId(columnOrder[index - 1]);
-        setFocusedTaskId(null); // Reset task focus when changing column
-      }
-    }],
-    ['ArrowDown', () => {
-      if (!focusedId) return;
-      const column = columns[focusedId];
-      if (!column || column.taskIds.length === 0) return;
+  // Helper function to filter tasks based on search and filters
+  const filterTasks = (tasks: Task[]): Task[] => {
+    return tasks.filter(task => {
+      // Search filter - check multiple fields
+      const matchesSearch = !searchQuery || 
+        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        task.assignee?.toLowerCase().includes(searchQuery.toLowerCase());
 
-      const currentTaskIndex = focusedTaskId ? column.taskIds.indexOf(focusedTaskId) : -1;
-      const nextTaskIndex = (currentTaskIndex + 1) % column.taskIds.length;
-      setFocusedTaskId(column.taskIds[nextTaskIndex]);
-    }],
-    ['ArrowUp', () => {
-      if (!focusedId) return;
-      const column = columns[focusedId];
-      if (!column || column.taskIds.length === 0) return;
-
-      const currentTaskIndex = focusedTaskId ? column.taskIds.indexOf(focusedTaskId) : -1;
-      if (currentTaskIndex === -1) {
-        // If no task is focused, focus the last one
-        setFocusedTaskId(column.taskIds[column.taskIds.length - 1]);
-      } else {
-        const prevTaskIndex = (currentTaskIndex - 1 + column.taskIds.length) % column.taskIds.length;
-        setFocusedTaskId(column.taskIds[prevTaskIndex]);
-      }
-    }],
-  ]);
+      // Priority filter
+      const matchesPriority = !filters.priority || task.priority === filters.priority;
+      
+      // Add more filters here as needed
+      // const matchesAssignee = !filters.assignee || task.assignee === filters.assignee;
+      
+      return matchesSearch && matchesPriority;
+    });
+  };
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -150,13 +139,145 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   const handleApplyFilters = (newFilters: Partial<Task>) => {
     setFilters(newFilters);
-    setIsFilterPanelOpen(false);
+    // Don't close panel anymore - keep it open for better UX
   };
 
   const handleAddNewColumn = () => {
     // Potremmo aprire un modale per chiedere il titolo, ma per ora usiamo un default.
     addColumn("New Column");
   };
+
+  useHotkeys([
+    // Navigation
+    ['ArrowRight', () => {
+      if (!focusedId) return;
+      const index = columnOrder.indexOf(focusedId);
+      if (index > -1 && index < columnOrder.length - 1) {
+        setFocusedId(columnOrder[index + 1]);
+        setFocusedTaskId(null);
+      }
+    }],
+    ['ArrowLeft', () => {
+      if (!focusedId) return;
+      const index = columnOrder.indexOf(focusedId);
+      if (index > 0) {
+        setFocusedId(columnOrder[index - 1]);
+        setFocusedTaskId(null);
+      }
+    }],
+    ['ArrowDown', () => {
+      if (!focusedId) return;
+      const column = columns[focusedId];
+      if (!column || column.taskIds.length === 0) return;
+      const currentTaskIndex = focusedTaskId ? column.taskIds.indexOf(focusedTaskId) : -1;
+      setFocusedTaskId(column.taskIds[(currentTaskIndex + 1) % column.taskIds.length]);
+    }],
+    ['ArrowUp', () => {
+      if (!focusedId) return;
+      const column = columns[focusedId];
+      if (!column || column.taskIds.length === 0) return;
+      const currentTaskIndex = focusedTaskId ? column.taskIds.indexOf(focusedTaskId) : -1;
+      const newIndex = (currentTaskIndex - 1 + column.taskIds.length) % column.taskIds.length;
+      setFocusedTaskId(column.taskIds[newIndex]);
+    }],
+
+    // Task Actions (no modifier)
+    ['Enter', () => {
+      if (focusedTaskId) {
+        const task = tasks[focusedTaskId];
+        if (task) handleEditTask(task);
+      }
+    }],
+    ['d', () => {
+      if (focusedTaskId) {
+        const task = tasks[focusedTaskId];
+        if (task && window.confirm(`Delete task "${task.title}"?`)) {
+          deleteTask(task.id);
+        }
+      }
+    }],
+
+    // Column Actions (requires Shift)
+    ['Shift+N', () => {
+      if (focusedId) {
+        setAddingTaskInColumn(focusedId);
+        setFocusedTaskId(null);
+      }
+    }],
+    ['Shift+D', () => {
+      if (focusedId) {
+        const column = columns[focusedId];
+        if (column && window.confirm(`Delete column "${column.title}"?`)) {
+          deleteColumn(column.id);
+        }
+      }
+    }],
+
+    // General Actions
+    ['c', handleAddNewColumn],
+    ['f', handleFilter],
+  ], { priority: 1 });
+
+  const dynamicCommands = useMemo(() => {
+    const allCommands: Command[] = [
+      { id: 'add-column', label: 'Add New Column', action: handleAddNewColumn, hotkey: 'c' },
+      { id: 'toggle-filters', label: 'Toggle Filters', action: handleFilter, hotkey: 'f' },
+    ];
+
+    const focusedColumn = focusedId ? columns[focusedId] : null;
+    const focusedTask = focusedTaskId ? tasks[focusedTaskId] : null;
+
+    // Column-specific commands
+    allCommands.push({
+      id: 'add-task',
+      label: 'Add New Task in Column',
+      action: () => {
+        if (focusedId) {
+          setAddingTaskInColumn(focusedId);
+          setFocusedTaskId(null);
+        }
+      },
+      hotkey: 'Shift+N',
+      disabled: !focusedColumn,
+    });
+    allCommands.push({
+      id: 'delete-column',
+      label: 'Delete Focused Column',
+      action: () => {
+        if (focusedColumn) {
+          if (window.confirm(`Are you sure you want to delete "${focusedColumn.title}"?`)) {
+            deleteColumn(focusedColumn.id);
+          }
+        }
+      },
+      hotkey: 'Shift+D',
+      disabled: !focusedColumn,
+    });
+
+    // Task-specific commands
+    allCommands.push({
+      id: 'edit-task',
+      label: 'Edit Focused Task',
+      action: () => focusedTask && handleEditTask(focusedTask),
+      hotkey: 'Enter',
+      disabled: !focusedTask,
+    });
+    allCommands.push({
+      id: 'delete-task',
+      label: 'Delete Focused Task',
+      action: () => {
+        if (focusedTask) {
+          if (window.confirm(`Are you sure you want to delete "${focusedTask.title}"?`)) {
+            deleteTask(focusedTask.id);
+          }
+        }
+      },
+      hotkey: 'd',
+      disabled: !focusedTask,
+    });
+
+    return allCommands;
+  }, [focusedId, focusedTaskId, columns, tasks, deleteTask, deleteColumn]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
@@ -299,6 +420,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           onFilter={handleFilter}
           onAddNewColumn={handleAddNewColumn} 
           filterActive={Object.keys(filters).length > 0}
+          activeFiltersCount={Object.keys(filters).length}
         />
         <Suspense fallback={<div>Loading...</div>}>
           {isFilterPanelOpen && <LazyFilterPanel onApplyFilters={handleApplyFilters} initialFilters={filters} onClose={() => setIsFilterPanelOpen(false)} />}
@@ -308,13 +430,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             const column = columns[columnId];
             if (!column) return null;
             const columnTasks = column.taskIds.map(taskId => tasks[taskId]).filter(Boolean);
-            const filteredTasks = columnTasks.filter(task => 
-              task.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-              (Object.keys(filters).length === 0 || 
-                (filters.priority ? task.priority === filters.priority : true)
-                // Add other filters here
-              )
-            );
+            const filteredTasks = filterTasks(columnTasks);
             return (
               <SortableKanbanColumn 
                 key={column.id} 
@@ -325,6 +441,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 focusedTaskId={focusedTaskId}
                 onEditTask={handleEditTask}
                 onDeleteTask={handleDeleteTask}
+                isAddingCard={addingTaskInColumn === column.id}
+                onToggleAddingCard={() => setAddingTaskInColumn(prev => prev === column.id ? null : column.id)}
               />
             );
           })}
@@ -363,6 +481,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           onFilter={handleFilter}
           onAddNewColumn={handleAddNewColumn} 
           filterActive={Object.keys(filters).length > 0}
+          activeFiltersCount={Object.keys(filters).length}
         />
         </div>
         <Suspense fallback={<div className="px-6">Loading filters...</div>}>
@@ -374,17 +493,20 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               const column = columns[colId];
               if (!column) return null;
               const columnTasks = column.taskIds.map(taskId => tasks[taskId]).filter(Boolean);
+              const filteredTasks = filterTasks(columnTasks);
 
               return (
                 <SortableKanbanColumn
                   key={column.id}
                   column={column}
-                  tasks={columnTasks}
+                  tasks={filteredTasks}
                   searchQuery={searchQuery}
                   isFocused={focusedId === column.id}
                   focusedTaskId={focusedId === column.id ? focusedTaskId : null}
                   onEditTask={handleEditTask}
                   onDeleteTask={handleDeleteTask}
+                  isAddingCard={addingTaskInColumn === column.id}
+                  onToggleAddingCard={() => setAddingTaskInColumn(prev => prev === column.id ? null : column.id)}
                 />
               );
             })}
@@ -405,6 +527,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             />
           )}
         </DragOverlay>
+
+        <CommandPalette commands={dynamicCommands} />
 
         {editingTask && (
           <EditTaskModal

@@ -7,10 +7,10 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from uuid import UUID
 
-from .auth import get_current_user
+from .auth import get_current_active_user
 from ..core.database import get_db_manager
 from ..core.logging import get_logger
-from ..db.models import InteractionType
+from ..db.models import InteractionType, User
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -30,7 +30,7 @@ class InteractionResponse(BaseModel):
 
 @router.get("/", response_model=List[InteractionResponse])
 async def get_interactions(
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     interaction_type: Optional[str] = Query(None),
     client_id: Optional[UUID] = Query(None),
     limit: int = Query(50, le=100),
@@ -39,7 +39,7 @@ async def get_interactions(
     """Get interactions for current user."""
     db = get_db_manager()
     
-    filters = {"team_member_id": current_user["id"]}
+    filters = {"team_member_id": current_user.id}
     if interaction_type:
         filters["type"] = interaction_type
     if client_id:
@@ -59,7 +59,7 @@ async def get_interactions(
 @router.get("/{interaction_id}")
 async def get_interaction(
     interaction_id: UUID,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Get specific interaction details."""
     db = get_db_manager()
@@ -70,7 +70,7 @@ async def get_interaction(
         raise HTTPException(status_code=404, detail="Interaction not found")
     
     # Check if user has access
-    if interaction["team_member_id"] != current_user["id"]:
+    if interaction["team_member_id"] != current_user.id:
         raise HTTPException(status_code=403, detail="Access denied")
     
     return interaction
@@ -78,7 +78,7 @@ async def get_interaction(
 
 @router.get("/unresponded")
 async def get_unresponded_interactions(
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Get interactions that require response."""
     db = get_db_manager()
@@ -86,7 +86,7 @@ async def get_unresponded_interactions(
     interactions = await db.get_many(
         "interactions",
         filters={
-            "team_member_id": current_user["id"],
+            "team_member_id": current_user.id,
             "requires_response": True,
             "responded_at": None
         },
@@ -99,14 +99,14 @@ async def get_unresponded_interactions(
 @router.post("/{interaction_id}/respond")
 async def mark_interaction_responded(
     interaction_id: UUID,
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Mark interaction as responded."""
     db = get_db_manager()
     
     # Verify ownership
     interaction = await db.get_by_id("interactions", str(interaction_id))
-    if not interaction or interaction["team_member_id"] != current_user["id"]:
+    if not interaction or interaction["team_member_id"] != current_user.id:
         raise HTTPException(status_code=404, detail="Interaction not found")
     
     # Update interaction

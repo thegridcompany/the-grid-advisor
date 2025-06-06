@@ -1,12 +1,10 @@
 'use client';
 
-import React, { createContext, useReducer, useContext, ReactNode, Dispatch, useEffect, useCallback, useRef } from 'react';
-import { RealtimeChannel } from '@supabase/supabase-js';
-import { Task, Column, KanbanState, KanbanAction } from '../types';
+import React, { createContext, useReducer, useContext, ReactNode, Dispatch, useEffect, useCallback } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { Task, Column, KanbanState, KanbanAction, KanbanTaskStatus, KanbanTaskPriority } from '../types';
 import * as kanbanApi from '../services/kanbanApi';
-import { supabase } from '@/lib/supabase';
 
-// const LOCAL_STORAGE_KEY = 'kanbanState'; // Rimosso perché non più usato qui
 
 // Default empty state if nothing in localStorage or passed as initial
 const defaultGlobalState: KanbanState = {
@@ -20,157 +18,79 @@ const defaultGlobalState: KanbanState = {
 // Reducer function
 const kanbanReducer = (state: KanbanState, action: KanbanAction): KanbanState => {
   const executionId = Math.random().toString(36).substring(7);
-  console.log(`[kanbanReducer ${executionId}] action:`, action.type, action); // Modificato per loggare l'intera azione
+  console.log(`[kanbanReducer ${executionId}] action:`, action.type, action);
   switch (action.type) {
     case 'FETCH_BOARD_DATA_START':
       return { ...state, isLoading: true, error: undefined };
-    case 'FETCH_BOARD_DATA_SUCCESS':
+    case 'FETCH_BOARD_DATA_SUCCESS': {
+      const { columns, tasks } = action.payload;
+
+      const tasksById = tasks.reduce((acc: Record<string, Task>, task: Task) => {
+        acc[task.id] = task;
+        return acc;
+      }, {});
+      
+      const columnsById = columns.reduce((acc: Record<string, Column>, column: Column) => {
+        const columnTasks = tasks.filter((t: Task) => t.column_id === column.id).sort((a: Task, b: Task) => a.position - b.position);
+        acc[column.id] = {
+            ...column,
+            title: column.name,
+            tasks: columnTasks,
+            taskIds: columnTasks.map((t: Task) => t.id)
+        };
+        return acc;
+      }, {});
+
+      const columnOrder = columns.sort((a, b) => a.position - b.position).map(c => c.id);
+
       return {
         ...state,
         isLoading: false,
-        tasks: action.payload.tasks,
-        columns: action.payload.columns,
-        columnOrder: action.payload.columnOrder,
+        tasks: tasksById,
+        columns: columnsById,
+        columnOrder: columnOrder,
         error: undefined,
       };
+    }
     case 'FETCH_BOARD_DATA_FAILURE':
       return { ...state, isLoading: false, error: action.payload };
 
     case 'SAVE_TASK_MOVE_START':
-      // Non impostare isLoading: true qui per evitare il full-page loader.
-      // L'UI è già stata aggiornata ottimisticamente.
-      // Resettiamo solo eventuali errori precedenti.
       return { ...state, error: undefined };
     
     case 'MOVE_TASK': { 
-      const { taskId, sourceColumnId, sourceIndex, targetColumnId, targetIndex } = action.payload;
-      
-      console.log(`[Reducer ${executionId} MOVE_TASK] Starting with state:`, {
-        sourceColumnTaskIds: state.columns[sourceColumnId]?.taskIds || 'MISSING',
-        targetColumnTaskIds: state.columns[targetColumnId]?.taskIds || 'MISSING',
-        taskAtSourceIndex: state.columns[sourceColumnId]?.taskIds[sourceIndex] || 'MISSING'
-      });
-      
-      // Enhanced StrictMode Guard: Multiple checks to prevent duplicate operations
-      const sourceColumn = state.columns[sourceColumnId];
-      const targetColumn = state.columns[targetColumnId];
-      
-      // 1. Check if columns exist
-      if (!sourceColumn || !targetColumn) {
-        console.warn(`[Reducer ${executionId}] MOVE_TASK: source or target column not found`);
-        return state;
-      }
-      
-      // 2. Check if the task is at the expected source position
-      if (sourceColumn.taskIds[sourceIndex] !== taskId) {
-        console.warn('[MOVE_TASK Guard] Task not found at expected source position, likely already moved', {
-          expectedTaskId: taskId,
-          actualTaskIdAtPosition: sourceColumn.taskIds[sourceIndex],
-          sourceIndex,
-          sourceColumnTaskIds: sourceColumn.taskIds
-        });
-        return state;
-      }
-      
-      // 3. Check if task would be duplicated in target column (different column moves only)
-      if (sourceColumnId !== targetColumnId && targetColumn.taskIds.includes(taskId)) {
-        console.warn('[MOVE_TASK Guard] Task already exists in target column, preventing duplication', {
-          taskId,
-          targetColumnId,
-          targetColumnTaskIds: targetColumn.taskIds
-        });
-        return state;
-      }
-      
-      // 4. Additional safeguard: Check if task appears in multiple columns (should never happen)
-      let taskFoundInColumns = 0;
-      Object.values(state.columns).forEach((col) => {
-        if (col.taskIds.includes(taskId)) {
-          taskFoundInColumns++;
-        }
-      });
-      
-      if (taskFoundInColumns > 1) {
-        console.error('[MOVE_TASK Guard] Task already exists in multiple columns, state corrupted!', {
-          taskId,
-          taskFoundInColumns,
-          allColumns: Object.fromEntries(Object.entries(state.columns).map(([id, col]) => [id, col.taskIds]))
-        });
-        return state;
-      }
-      
-      console.log('[Reducer MOVE_TASK] Payload:', action.payload);
+      const { taskId, sourceColumnId, targetColumnId, newPosition } = action.payload;
+      const task = state.tasks[taskId];
+      if (!task) return state;
 
-      if (!targetColumnId) { console.warn('MOVE_TASK: targetColumnId is null'); return state; }
-
-      // Same column drag
-      if (sourceColumnId === targetColumnId) {
-        const newTaskIds = Array.from(sourceColumn.taskIds);
-        const [removed] = newTaskIds.splice(sourceIndex, 1);
-        const finalTargetIndex = (targetIndex == null || targetIndex < 0) ? newTaskIds.length : targetIndex;
-        newTaskIds.splice(finalTargetIndex, 0, removed);
-
-        const newColumn = {
-          ...sourceColumn,
-          taskIds: newTaskIds,
-        };
-        
-        const newColumns = {
-          ...state.columns,
-          [sourceColumnId]: newColumn,
-        };
-
-        console.log('[Reducer MOVE_TASK] New state columns (same column):', JSON.parse(JSON.stringify(newColumns)));
-        
-        // Verify no task duplication
-        const allTaskIds = Object.values(newColumns).flatMap(col => col.taskIds);
-        const uniqueTaskIds = new Set(allTaskIds);
-        if (allTaskIds.length !== uniqueTaskIds.size) {
-          console.error('[Reducer MOVE_TASK] Task duplication detected in same column move!', {
-            allTaskIds,
-            uniqueCount: uniqueTaskIds.size,
-            totalCount: allTaskIds.length
-          });
-        }
-        
-        return { ...state, columns: newColumns };
+      const newColumns = JSON.parse(JSON.stringify(state.columns));
+      
+      // Remove from source
+      const sourceCol = newColumns[sourceColumnId];
+      if (sourceCol) {
+        sourceCol.taskIds = sourceCol.taskIds.filter((id: string) => id !== taskId);
+        sourceCol.tasks = sourceCol.tasks.filter((t: Task) => t.id !== taskId);
       }
 
-      // Different column drag
-      const newSourceTaskIds = Array.from(sourceColumn.taskIds);
-      const [removed] = newSourceTaskIds.splice(sourceIndex, 1);
-
-      const newTargetTaskIds = Array.from(targetColumn.taskIds);
-      const finalTargetIndex = (targetIndex == null || targetIndex < 0) ? newTargetTaskIds.length : targetIndex;
-      newTargetTaskIds.splice(finalTargetIndex, 0, removed);
-
-      const newColumns = {
-        ...state.columns,
-        [sourceColumnId]: { ...sourceColumn, taskIds: newSourceTaskIds },
-        [targetColumnId]: { ...targetColumn, taskIds: newTargetTaskIds },
-      };
-      
-      // DEBUG LOGGING START (Reducer)
-      console.log('[Reducer MOVE_TASK] New state columns (diff column):', JSON.parse(JSON.stringify(newColumns)));
-      
-      // Verify no task duplication
-      const allTaskIds = Object.values(newColumns).flatMap(col => col.taskIds);
-      const uniqueTaskIds = new Set(allTaskIds);
-      if (allTaskIds.length !== uniqueTaskIds.size) {
-        console.error('[Reducer MOVE_TASK] Task duplication detected in different column move!', {
-          allTaskIds,
-          uniqueCount: uniqueTaskIds.size,
-          totalCount: allTaskIds.length
-        });
+      // Add to target
+      const targetCol = newColumns[targetColumnId];
+      if (targetCol) {
+          const updatedTask = { ...task, column_id: targetColumnId, position: newPosition ?? 0 };
+          targetCol.tasks.splice(newPosition ?? 0, 0, updatedTask);
+          // Re-calculate positions for all tasks in the target column
+          targetCol.tasks.forEach((t: Task, i: number) => t.position = i);
+          targetCol.taskIds = targetCol.tasks.map((t: Task) => t.id);
+          
+          return {
+              ...state,
+              columns: newColumns,
+              tasks: { ...state.tasks, [taskId]: updatedTask }
+          };
       }
-      // DEBUG LOGGING END (Reducer)
-      
-      return { ...state, columns: newColumns }; 
+      return state;
     }
 
-    case 'SAVE_TASK_MOVE_SUCCESS': // Chiamata API ha confermato il salvataggio
-      // Temporarily only update loading state, keep optimistic update
-      // This helps isolate if the issue is with API response overwriting the state
+    case 'SAVE_TASK_MOVE_SUCCESS':
       console.log('[Reducer] SAVE_TASK_MOVE_SUCCESS - keeping optimistic update, only clearing loading state');
       return {
         ...state,
@@ -179,9 +99,7 @@ const kanbanReducer = (state: KanbanState, action: KanbanAction): KanbanState =>
       };
     case 'SAVE_TASK_MOVE_FAILURE':
       console.error("SAVE_TASK_MOVE_FAILURE:", action.payload.error);
-      // Qui non ripristiniamo lo stato perché l'UI è già aggiornata.
-      // Il rollback viene gestito da un'azione separata.
-      return { ...state, isLoading: false, error: action.payload.error }; // Assicurati che isLoading sia false anche in caso di fallimento
+      return { ...state, isLoading: false, error: action.payload.error };
 
     case 'MOVE_TASK_ROLLBACK':
       console.warn('[Reducer] Rolling back task move');
@@ -193,19 +111,19 @@ const kanbanReducer = (state: KanbanState, action: KanbanAction): KanbanState =>
       };
 
     case 'ADD_COLUMN': {
-      const { newColumnId, title } = action.payload;
-      const newColumn: Column = {
-        id: newColumnId,
-        title: title,
-        taskIds: [],
-      };
+      const { newColumn } = action.payload;
       return {
         ...state,
         columns: {
           ...state.columns,
-          [newColumnId]: newColumn,
+          [newColumn.id]: {
+              ...newColumn,
+              title: newColumn.name,
+              tasks: [],
+              taskIds: []
+          },
         },
-        columnOrder: [...state.columnOrder, newColumnId],
+        columnOrder: [...state.columnOrder, newColumn.id],
       };
     }
 
@@ -215,7 +133,7 @@ const kanbanReducer = (state: KanbanState, action: KanbanAction): KanbanState =>
       if (!columnToUpdate) {
         return state; // Column not found
       }
-      const updatedColumn = { ...columnToUpdate, title: newTitle };
+      const updatedColumn = { ...columnToUpdate, title: newTitle, name: newTitle };
       return {
         ...state,
         columns: {
@@ -226,113 +144,8 @@ const kanbanReducer = (state: KanbanState, action: KanbanAction): KanbanState =>
     }
 
     case 'SET_STATE_FROM_PERSISTENCE': 
-      // Questa azione potrebbe non essere più necessaria se il caricamento iniziale avviene tramite FETCH_BOARD_DATA
-      // Tuttavia, la mock API potrebbe ancora popolare localStorage e questo potrebbe essere usato per inizializzare
-      // direttamente lo stato se non si vuole passare per la finta chiamata API fetchBoardData al primo caricamento.
-      // Per ora, la manteniamo come modo per idratare lo stato, ma il flusso principale sarà FETCH.
-      console.warn('[kanbanReducer] SET_STATE_FROM_PERSISTENCE used. Ensure this is intended.');
-      return action.payload;
-
-    // New actions for real-time updates
-    case 'REALTIME_TASK_UPDATE': {
-        const { updatedTask } = action.payload;
-        return {
-            ...state,
-            tasks: {
-                ...state.tasks,
-                [updatedTask.id]: updatedTask,
-            },
-        };
-    }
-
-    case 'REALTIME_COLUMN_UPDATE': {
-        const { updatedColumn } = action.payload;
-        return {
-            ...state,
-            columns: {
-                ...state.columns,
-                [updatedColumn.id]: {
-                    ...state.columns[updatedColumn.id], // preserve existing properties like taskIds
-                    ...updatedColumn,
-                },
-            },
-        };
-    }
-
-    case 'REALTIME_TASK_MOVE': {
-        // This is a simplified version. A robust implementation
-        // would need to handle potential conflicts with local optimistic updates.
-        const { sourceColumnId, targetColumnId, newSourceTaskIds, newTargetTaskIds } = action.payload;
-
-        if (sourceColumnId === targetColumnId) {
-             return {
-                ...state,
-                columns: {
-                    ...state.columns,
-                    [sourceColumnId]: {
-                        ...state.columns[sourceColumnId],
-                        taskIds: newSourceTaskIds,
-                    },
-                },
-            };
-        }
-        
-        return {
-            ...state,
-            columns: {
-                ...state.columns,
-                [sourceColumnId]: { ...state.columns[sourceColumnId], taskIds: newSourceTaskIds },
-                [targetColumnId]: { ...state.columns[targetColumnId], taskIds: newTargetTaskIds },
-            },
-        };
-    }
-
-    case 'REALTIME_COLUMN_ADDED': {
-        const { newColumn } = action.payload;
-        return {
-            ...state,
-            columns: {
-                ...state.columns,
-                [newColumn.id]: newColumn,
-            },
-            columnOrder: [...state.columnOrder, newColumn.id],
-        };
-    }
-
-    case 'REALTIME_COLUMN_TITLE_UPDATED': {
-        const { columnId, newTitle } = action.payload;
-        return {
-            ...state,
-            columns: {
-                ...state.columns,
-                [columnId]: {
-                    ...state.columns[columnId],
-                    title: newTitle,
-                },
-            },
-        };
-    }
-
-    case 'REALTIME_COLUMN_DELETED': {
-        const { columnId } = action.payload;
-        const { [columnId]: deletedColumn, ...remainingColumns } = state.columns;
-        if (!deletedColumn) {
-            return state;
-        }
-        return {
-            ...state,
-            columns: remainingColumns,
-            columnOrder: state.columnOrder.filter(id => id !== columnId),
-        };
-    }
-
-    case 'REALTIME_COLUMN_MOVED': {
-        const { newColumnOrder } = action.payload;
-        return {
-            ...state,
-            columnOrder: newColumnOrder,
-        };
-    }
+      console.warn('[kanbanReducer] SET_STATE_FROM_PERSISTENCE is deprecated.');
+      return state;
 
     case 'UPDATE_COLUMN_COLOR': {
       const { columnId, color } = action.payload;
@@ -364,7 +177,6 @@ const kanbanReducer = (state: KanbanState, action: KanbanAction): KanbanState =>
       if (!deletedColumn) {
         return state;
       }
-      // Also remove any tasks that were in the deleted column
       const taskIdsToDelete = new Set(deletedColumn.taskIds);
       const remainingTasks = { ...state.tasks };
       taskIdsToDelete.forEach(taskId => {
@@ -387,55 +199,80 @@ const kanbanReducer = (state: KanbanState, action: KanbanAction): KanbanState =>
         return state;
       }
 
+      const newTasks = { ...state.tasks, [newTask.id]: newTask };
+      const newColumn = { ...column, tasks: [...column.tasks, newTask].sort((a,b) => a.position - b.position) };
+      newColumn.taskIds = newColumn.tasks.map(t => t.id);
+      
       return {
         ...state,
-        tasks: {
-          ...state.tasks,
-          [newTask.id]: newTask,
-        },
-        columns: {
-          ...state.columns,
-          [columnId]: {
-            ...column,
-            taskIds: [...column.taskIds, newTask.id],
-          },
-        },
+        tasks: newTasks,
+        columns: { ...state.columns, [columnId]: newColumn },
       };
     }
 
     case 'UPDATE_TASK': {
       const { updatedTask } = action.payload;
-      return {
-        ...state,
-        tasks: {
-          ...state.tasks,
-          [updatedTask.id]: updatedTask,
-        },
-      };
+      const oldTask = state.tasks[updatedTask.id];
+      if (!oldTask) return state;
+
+      const newTasks = { ...state.tasks, [updatedTask.id]: updatedTask };
+
+      if (oldTask.column_id !== updatedTask.column_id) {
+          const newColumns = JSON.parse(JSON.stringify(state.columns));
+          
+          const sourceCol = newColumns[oldTask.column_id];
+          if(sourceCol) {
+              sourceCol.tasks = sourceCol.tasks.filter((t: Task) => t.id !== updatedTask.id);
+              sourceCol.taskIds = sourceCol.tasks.map((t: Task) => t.id);
+          }
+
+          const targetCol = newColumns[updatedTask.column_id];
+          if(targetCol) {
+              targetCol.tasks.push(updatedTask);
+              targetCol.tasks.sort((a: Task, b: Task) => a.position - b.position);
+              targetCol.taskIds = targetCol.tasks.map((t: Task) => t.id);
+          }
+
+          return { ...state, tasks: newTasks, columns: newColumns };
+      } else {
+          const column = state.columns[updatedTask.column_id];
+          const newColumn = {
+              ...column,
+              tasks: column.tasks.map(t => t.id === updatedTask.id ? updatedTask : t)
+          };
+          return {
+              ...state,
+              tasks: newTasks,
+              columns: { ...state.columns, [updatedTask.column_id]: newColumn }
+          };
+      }
     }
 
     case 'DELETE_TASK': {
       const { taskId } = action.payload;
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { [taskId]: deletedTask, ...remainingTasks } = state.tasks;
-
-      // Also remove the task ID from the column it belongs to
-      const newColumns = { ...state.columns };
-      for (const columnId in newColumns) {
-        const column = newColumns[columnId];
-        const taskIndex = column.taskIds.indexOf(taskId);
-        if (taskIndex > -1) {
-          const newTaskIds = [...column.taskIds];
-          newTaskIds.splice(taskIndex, 1);
-          newColumns[columnId] = { ...column, taskIds: newTaskIds };
-          break; // Assume task is only in one column
-        }
+      if (!deletedTask) {
+        return state;
       }
+
+      const column = state.columns[deletedTask.column_id];
+      if (!column) {
+        return state;
+      }
+      
+      const newColumn = {
+        ...column,
+        tasks: column.tasks.filter(t => t.id !== taskId),
+        taskIds: column.taskIds.filter(id => id !== taskId),
+      };
 
       return {
         ...state,
         tasks: remainingTasks,
-        columns: newColumns,
+        columns: {
+          ...state.columns,
+          [deletedTask.column_id]: newColumn,
+        },
       };
     }
 
@@ -444,360 +281,245 @@ const kanbanReducer = (state: KanbanState, action: KanbanAction): KanbanState =>
   }
 };
 
-const KanbanStateContext = createContext<KanbanState | undefined>(undefined);
-
-interface KanbanDispatch {
-  dispatch: Dispatch<KanbanAction>;
-  moveTask: (payload: { taskId: string; sourceColumnId: string; sourceIndex: number; targetColumnId: string; targetIndex: number | null }) => Promise<void>;
-  addTask: (payload: { columnId: string, title: string }) => Promise<void>;
-  addColumn: (title: string) => Promise<void>;
-  updateColumnTitle: (columnId: string, newTitle: string) => Promise<void>;
-  deleteColumn: (columnId: string) => Promise<void>;
-  moveColumn: (sourceIndex: number, targetIndex: number) => Promise<void>;
-  updateColumnColor: (columnId: string, color: string) => Promise<void>;
-  updateTask: (updatedTask: Task) => void;
-  deleteTask: (taskId: string) => void;
-}
+const KanbanContext = createContext<{ state: KanbanState; dispatch: Dispatch<KanbanAction> } | undefined>(undefined);
 const KanbanDispatchContext = createContext<KanbanDispatch | undefined>(undefined);
 
-interface KanbanProviderProps {
-  children: ReactNode;
-  initialTasks?: Task[]; 
-  initialColumns?: Column[];
+// Interface for our dispatch context
+interface KanbanDispatch {
+  dispatch: Dispatch<KanbanAction>;
+  addTask: (payload: { columnId: string; title: string; projectId: string }) => Promise<void>;
+  addColumn: (payload: { name: string; projectId: string }) => Promise<void>;
+  updateColumnTitle: (columnId: string, newTitle: string) => Promise<void>;
+  deleteColumn: (columnId: string) => Promise<void>;
+  moveColumn: (sourceIndex: number, targetIndex: number, columnId: string) => Promise<void>;
+  updateColumnColor: (columnId: string, color: string) => Promise<void>;
+  updateTask: (taskId: string, updatedFields: Partial<Omit<Task, 'id'>>) => Promise<void>;
+  deleteTask: (taskId: string) => Promise<void>;
+  moveTask: (taskId: string, sourceColumnId: string, destColumnId: string, newPosition: number) => Promise<void>;
+  loadBoard: (projectId: string) => Promise<void>;
 }
 
-export const KanbanProvider: React.FC<KanbanProviderProps> = ({ 
-  children, 
-  initialTasks = [], 
-  initialColumns = [] 
-}) => {
-  const channelRef = useRef<RealtimeChannel | null>(null);
+// Props for the provider
+interface KanbanProviderProps {
+  children: ReactNode;
+  projectId: string;
+}
 
-  const initializeStateFromProps = (): KanbanState => {
-    if (initialTasks.length > 0 && initialColumns.length > 0) {
-      const tasks = initialTasks.reduce((acc, task) => ({ ...acc, [task.id]: task }), {});
-      const columns = initialColumns.reduce((acc, column) => ({ ...acc, [column.id]: column }), {});
-      const columnOrder = initialColumns.map(column => column.id);
-      return { ...defaultGlobalState, tasks, columns, columnOrder };
+// Provider component
+export const KanbanProvider: React.FC<KanbanProviderProps> = ({ children, projectId }) => {
+  const [state, dispatch] = useReducer(kanbanReducer, defaultGlobalState);
+  const { session } = useAuth();
+  const accessToken = session?.access_token;
+
+  const loadBoard = useCallback(async (currentProjectId: string) => {
+    if (!accessToken) return;
+    dispatch({ type: 'FETCH_BOARD_DATA_START' });
+    try {
+      const boardData = await kanbanApi.fetchBoardData(currentProjectId, accessToken);
+      dispatch({ type: 'FETCH_BOARD_DATA_SUCCESS', payload: boardData });
+    } catch (error) {
+      console.error('Failed to load board data:', error);
+      dispatch({ type: 'FETCH_BOARD_DATA_FAILURE', payload: (error as Error).message });
     }
-    return defaultGlobalState;
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (projectId && accessToken) {
+      loadBoard(projectId);
+    }
+  }, [projectId, accessToken, loadBoard]);
+
+
+  const addColumn = async (payload: { name: string; projectId: string }) => {
+    if (!accessToken) return;
+    const { name, projectId } = payload;
+    const position = state.columnOrder.length;
+    try {
+      // API expects project_id
+      const newColumn = await kanbanApi.createColumn({ name, project_id: projectId, position }, accessToken);
+      dispatch({ type: 'ADD_COLUMN', payload: { newColumn } });
+    } catch (error) {
+      console.error("Failed to add column:", error);
+    }
   };
 
-  const [state, dispatch] = useReducer(kanbanReducer, defaultGlobalState, () => {
-    // We are now initializing with a clean slate and fetching from the API,
-    // so we don't need to read from localStorage here.
-    // The initial state will be the defaultGlobalState.
-    return initializeStateFromProps();
-  });
-
-  // Add a ref to track if a move operation is in progress
-  const isMoveInProgress = useRef(false);
-
-  useEffect(() => {
-    if (!state.isLoading && Object.keys(state.tasks).length === 0) {
-      const loadBoard = async () => {
-        dispatch({ type: 'FETCH_BOARD_DATA_START' });
-        try {
-          const boardData = await kanbanApi.fetchBoardData();
-          dispatch({
-            type: 'FETCH_BOARD_DATA_SUCCESS',
-            payload: {
-              tasks: boardData.tasks,
-              columns: boardData.columns,
-              columnOrder: boardData.columnOrder,
-            }
-          });
-        } catch (err) {
-          dispatch({ type: 'FETCH_BOARD_DATA_FAILURE', payload: err instanceof Error ? err.message : String(err) });
-        }
-      };
-      loadBoard();
-    }
-  }, [state.isLoading, state.tasks]);
-  
-  // New useEffect for Supabase Realtime
-  useEffect(() => {
-    const projectId = '1'; // In a real app, this would be dynamic
-    const channel = supabase.channel(`kanban-board:${projectId}`);
-
-    channel
-      .on('broadcast', { event: 'task_updated' }, ({ payload }) => {
-        console.log('REALTIME: Received task_updated', payload);
-        dispatch({ type: 'REALTIME_TASK_UPDATE', payload: { updatedTask: payload.task } });
-      })
-      .on('broadcast', { event: 'column_updated' }, ({ payload }) => {
-        console.log('REALTIME: Received column_updated', payload);
-        dispatch({ type: 'REALTIME_COLUMN_UPDATE', payload: { updatedColumn: payload.column } });
-      })
-      .on('broadcast', { event: 'task_moved' }, ({ payload }) => {
-          console.log('REALTIME: Received task_moved', payload);
-          // Here we should probably check if the user who triggered the move is the current user
-          // to avoid dispatching an action for our own moves.
-          // This can be done by sending a userId with the broadcast and comparing it.
-          dispatch({ 
-              type: 'REALTIME_TASK_MOVE', 
-              payload: {
-                  taskId: payload.taskId,
-                  sourceColumnId: payload.sourceColumnId,
-                  targetColumnId: payload.targetColumnId,
-                  newSourceTaskIds: payload.sourceTaskIds,
-                  newTargetTaskIds: payload.targetTaskIds,
-              }
-          });
-      })
-      .on('broadcast', { event: 'column_added' }, ({ payload }) => {
-        console.log('REALTIME: Received column_added', payload);
-        dispatch({ type: 'REALTIME_COLUMN_ADDED', payload: { newColumn: payload } });
-      })
-      .on('broadcast', { event: 'column_title_updated' }, ({ payload }) => {
-        console.log('REALTIME: Received column_title_updated', payload);
-        dispatch({ type: 'REALTIME_COLUMN_TITLE_UPDATED', payload: { columnId: payload.columnId, newTitle: payload.newTitle } });
-      })
-      .on('broadcast', { event: 'column_deleted' }, ({ payload }) => {
-        console.log('REALTIME: Received column_deleted', payload);
-        dispatch({ type: 'REALTIME_COLUMN_DELETED', payload: { columnId: payload.columnId } });
-      })
-      .on('broadcast', { event: 'column_moved' }, ({ payload }) => {
-        console.log('REALTIME: Received column_moved', payload);
-        dispatch({ type: 'REALTIME_COLUMN_MOVED', payload: { newColumnOrder: payload.columnOrder } });
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Successfully subscribed to Supabase channel!');
-        }
-        if (status === 'CHANNEL_ERROR') {
-            console.error('There was an error subscribing to the channel.');
-        }
-        if (status === 'TIMED_OUT') {
-            console.warn('Subscription timed out.');
-        }
-      });
-      
-      channelRef.current = channel;
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-        console.log('Unsubscribed from Supabase channel.');
-      }
-    };
-  }, []);
-
-  const moveTask = useCallback(async (payload: { taskId: string; sourceColumnId: string; sourceIndex: number; targetColumnId: string; targetIndex: number | null }) => {
-    if (isMoveInProgress.current) {
-      console.warn('Move already in progress, skipping subsequent call.');
-      return;
-    }
-    isMoveInProgress.current = true;
-
-    const originalState = {
-      columns: JSON.parse(JSON.stringify(state.columns)),
-      columnOrder: [...state.columnOrder],
-    };
-
-    dispatch({ type: 'MOVE_TASK', payload });
-    
-    // Get the state after the optimistic update to broadcast it
-    const updatedBoardState = kanbanReducer(state, { type: 'MOVE_TASK', payload });
-
-    // After optimistic update, broadcast the change
-    if (channelRef.current) {
-      try {
-        await channelRef.current.send({
-          type: 'broadcast',
-          event: 'task_moved',
-          payload: {
-            taskId: payload.taskId,
-            sourceColumnId: payload.sourceColumnId,
-            targetColumnId: payload.targetColumnId,
-            sourceTaskIds: updatedBoardState.columns[payload.sourceColumnId].taskIds,
-            targetTaskIds: updatedBoardState.columns[payload.targetColumnId].taskIds,
-          },
-        });
-        console.log('Broadcasted task_moved event');
-      } catch (error) {
-        console.error('Failed to broadcast task_moved event', error);
-      }
-    }
-
-    try {
-      await kanbanApi.saveTaskMove(payload);
-      dispatch({ type: 'SAVE_TASK_MOVE_SUCCESS', payload: updatedBoardState });
-    } catch (err) {
-      console.error('[KanbanProvider moveTask] kanbanApi.saveTaskMove FAILURE', err);
-      dispatch({
-        type: 'MOVE_TASK_ROLLBACK',
-        payload: {
-          ...originalState,
-          error: err instanceof Error ? err.message : 'Failed to save task move.'
-        }
-      });
-    } finally {
-      isMoveInProgress.current = false;
-    }
-  }, [dispatch, state, isMoveInProgress]);
-
-  const addTask = useCallback(async (payload: { columnId: string, title: string }) => {
-    // In a real app, this would first hit an API to get the new task object
-    // including the ID generated by the backend.
-    // For now, we generate a simple client-side ID.
-    const newTask: Task = {
-      id: `task-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      title: payload.title,
-      createdAt: new Date(),
-      priority: 'medium', // Default priority
-    };
-
-    dispatch({ type: 'ADD_TASK', payload: { columnId: payload.columnId, newTask } });
-    
-    // Here you would typically save the new task to the backend.
-    // await kanbanApi.addTask(newTask, payload.columnId);
-  }, [dispatch]);
-
-  const addColumn = useCallback(async (title: string) => {
-    // Optimistic UI update
-    const newColumnId = `col-${Date.now()}`;
-    dispatch({ type: 'ADD_COLUMN', payload: { newColumnId, title } });
-
-    // After optimistic update, broadcast the change
-    if (channelRef.current) {
-      try {
-        await channelRef.current.send({
-          type: 'broadcast',
-          event: 'column_added',
-          payload: {
-            id: newColumnId,
-            title,
-            taskIds: [],
-          },
-        });
-        console.log('Broadcasted column_added event');
-      } catch (error) {
-        console.error('Failed to broadcast column_added event', error);
-      }
-    }
-    
-    // API call
-    try {
-      const newColumn = await kanbanApi.saveNewColumn({ id: newColumnId, title });
-      // Here you might want to dispatch an action to update the temporary ID
-      // with the one from the server, but for now we'll keep it simple.
-      console.log('Column added successfully via API', newColumn);
-    } catch (error) {
-      console.error('Failed to add column via API', error);
-      // Implement rollback logic if needed
-    }
-  }, [dispatch]);
-
-  const updateColumnTitle = useCallback(async (columnId: string, newTitle: string) => {
+  const updateColumnTitle = async (columnId: string, newTitle: string) => {
+    if (!accessToken) return;
+    // Optimistic update
     dispatch({ type: 'UPDATE_COLUMN_TITLE', payload: { columnId, newTitle } });
-
-    if (channelRef.current) {
-      try {
-        await channelRef.current.send({
-          type: 'broadcast',
-          event: 'column_title_updated',
-          payload: { columnId, newTitle },
-        });
-      } catch (error) {
-        console.error('Failed to broadcast column_title_updated event', error);
-      }
-    }
-
     try {
-      await kanbanApi.saveColumnTitle({ columnId, newTitle });
+      await kanbanApi.updateColumn(columnId, { name: newTitle }, accessToken);
     } catch (error) {
-      console.error('Failed to update column title via API', error);
-      // Implement rollback logic if needed
+      console.error("Failed to update column title:", error);
+      // Here you might want to add a rollback mechanism
     }
-  }, [dispatch]);
+  };
 
-  const deleteColumn = useCallback(async (columnId: string) => {
-    dispatch({ type: 'DELETE_COLUMN', payload: { columnId } });
-
-    if (channelRef.current) {
-        try {
-            await channelRef.current.send({
-                type: 'broadcast',
-                event: 'column_deleted',
-                payload: { columnId },
-            });
-        } catch (error) {
-            console.error('Failed to broadcast column_deleted event', error);
-        }
-    }
-
-    try {
-      await kanbanApi.deleteColumn(columnId);
-    } catch (error) {
-      console.error('Failed to delete column via API', error);
-      // Implement rollback logic if needed
-    }
-  }, [dispatch]);
-
-  const moveColumn = useCallback(async (sourceIndex: number, targetIndex: number) => {
-    dispatch({ type: 'MOVE_COLUMN', payload: { sourceIndex, targetIndex } });
-    
-    const newColumnOrder = Array.from(state.columnOrder);
-    const [movedColumn] = newColumnOrder.splice(sourceIndex, 1);
-    newColumnOrder.splice(targetIndex, 0, movedColumn);
-
-    if (channelRef.current) {
-        try {
-            await channelRef.current.send({
-                type: 'broadcast',
-                event: 'column_moved',
-                payload: { columnOrder: newColumnOrder },
-            });
-        } catch (error) {
-            console.error('Failed to broadcast column_moved event', error);
-        }
-    }
-
-    try {
-      await kanbanApi.saveColumnOrder(newColumnOrder);
-    } catch (error) {
-      console.error('Failed to save column order via API', error);
-      // Implement rollback logic if needed
-    }
-  }, [dispatch, state.columnOrder]);
-
-  const updateColumnColor = useCallback(async (columnId: string, color: string) => {
+  const updateColumnColor = async (columnId: string, color: string) => {
+    if (!accessToken) return;
     dispatch({ type: 'UPDATE_COLUMN_COLOR', payload: { columnId, color } });
     try {
-      await kanbanApi.saveColumnColor({ columnId, color });
+      await kanbanApi.updateColumn(columnId, { color }, accessToken);
     } catch (error) {
-      console.error('Failed to save column color via API', error);
-      // Implement rollback logic if needed
+      console.error("Failed to update column color:", error);
+      // Rollback logic could be added here
     }
-  }, [dispatch]);
+  };
 
-  const updateTask = useCallback((updatedTask: Task) => {
-    dispatch({ type: 'UPDATE_TASK', payload: { updatedTask } });
-  }, [dispatch]);
+  const moveColumn = async (sourceIndex: number, targetIndex: number, columnId: string) => {
+    if (!accessToken) return;
+    
+    // Optimistic update
+    dispatch({ type: 'MOVE_COLUMN', payload: { sourceIndex, targetIndex } });
 
-  const deleteTask = useCallback((taskId: string) => {
-    if (window.confirm('Are you sure you want to delete this task?')) {
+    try {
+        // Here we'd need to update all affected columns' positions on the backend
+        // For now, just updating the moved one. A more robust solution might be a dedicated endpoint.
+        await kanbanApi.updateColumn(columnId, { position: targetIndex }, accessToken);
+    } catch (error) {
+        console.error("Failed to move column:", error);
+        // Rollback on failure by reversing the move
+        dispatch({ type: 'MOVE_COLUMN', payload: { sourceIndex: targetIndex, targetIndex: sourceIndex } });
+    }
+  };
+
+  const deleteColumn = async (columnId: string) => {
+    if (!accessToken) return;
+    const originalState = { ...state };
+    // Optimistic delete
+    dispatch({ type: 'DELETE_COLUMN', payload: { columnId } });
+    try {
+      await kanbanApi.deleteColumn(columnId, accessToken);
+    } catch (error) {
+      console.error("Failed to delete column:", error);
+      // Rollback on failure
+      dispatch({ type: 'FETCH_BOARD_DATA_SUCCESS', payload: { columns: Object.values(originalState.columns), tasks: Object.values(originalState.tasks) } });
+    }
+  };
+
+  const addTask = async (payload: { columnId: string; title: string; projectId: string }) => {
+    if (!accessToken) return;
+    const { columnId, title, projectId } = payload;
+    const column = state.columns[columnId];
+    if (!column) {
+      console.error(`Cannot add task to non-existent column ${columnId}`);
+      return;
+    }
+    const position = column.tasks.length;
+    
+    try {
+      const newTaskData = {
+        title,
+        project_id: projectId,
+        column_id: columnId,
+        position,
+        description: '', 
+        status: KanbanTaskStatus.TODO,
+        priority: KanbanTaskPriority.MEDIUM,
+        due_date: null
+      };
+      const newTask = await kanbanApi.createTask(newTaskData, accessToken);
+      dispatch({ type: 'ADD_TASK', payload: { columnId, newTask } });
+    } catch (error) {
+      console.error("Failed to add task:", error);
+    }
+  };
+
+  const updateTask = async (taskId: string, updatedFields: Partial<Omit<Task, 'id'>>) => {
+      if (!accessToken) return;
+      const originalTask = state.tasks[taskId];
+      if (!originalTask) return;
+
+      const updatedTask = { ...originalTask, ...updatedFields };
+
+      // Optimistic update
+      dispatch({ type: 'UPDATE_TASK', payload: { updatedTask } });
+
+      try {
+          await kanbanApi.updateTask(taskId, updatedFields, accessToken);
+      } catch (error) {
+          console.error("Failed to update task:", error);
+          // Rollback
+          dispatch({ type: 'UPDATE_TASK', payload: { updatedTask: originalTask } });
+      }
+  };
+
+  const deleteTask = async (taskId: string) => {
+      if (!accessToken) return;
+      const taskToDelete = state.tasks[taskId];
+      if (!taskToDelete) return;
+      
+      // Optimistic delete
       dispatch({ type: 'DELETE_TASK', payload: { taskId } });
+
+      try {
+          await kanbanApi.deleteTask(taskId, accessToken);
+      } catch (error) {
+          console.error("Failed to delete task:", error);
+          // Rollback
+          dispatch({ type: 'ADD_TASK', payload: { columnId: taskToDelete.column_id, newTask: taskToDelete } });
+      }
+  };
+
+  const moveTask = async (taskId: string, sourceColumnId: string, destColumnId: string, newPosition: number) => {
+    if (!accessToken) return;
+    
+    const originalState = {
+        columns: JSON.parse(JSON.stringify(state.columns)),
+        columnOrder: [...state.columnOrder],
+    };
+
+    // Optimistic update
+    dispatch({ type: 'MOVE_TASK', payload: { taskId, sourceColumnId, targetColumnId: destColumnId, newPosition, sourceIndex: 0, targetIndex: null } });
+    
+    dispatch({ type: 'SAVE_TASK_MOVE_START' });
+
+    try {
+        await kanbanApi.moveTask(taskId, destColumnId, newPosition, accessToken);
+        dispatch({ type: 'SAVE_TASK_MOVE_SUCCESS' });
+    } catch (error) {
+        console.error("Failed to move task:", error);
+        dispatch({
+            type: 'MOVE_TASK_ROLLBACK',
+            payload: {
+                columns: originalState.columns,
+                columnOrder: originalState.columnOrder,
+                error: (error as Error).message
+            }
+        });
     }
-  }, [dispatch]);
+  };
+
+  const dispatchers: KanbanDispatch = {
+    dispatch,
+    loadBoard,
+    addColumn,
+    updateColumnTitle,
+    updateColumnColor,
+    moveColumn,
+    deleteColumn,
+    addTask,
+    updateTask,
+    deleteTask,
+    moveTask,
+  };
 
   return (
-    <KanbanStateContext.Provider value={state}>
-      <KanbanDispatchContext.Provider value={{ dispatch, moveTask, addTask, addColumn, updateColumnTitle, deleteColumn, moveColumn, updateColumnColor, updateTask, deleteTask }}>
+    <KanbanContext.Provider value={{ state, dispatch }}>
+      <KanbanDispatchContext.Provider value={dispatchers}>
         {children}
       </KanbanDispatchContext.Provider>
-    </KanbanStateContext.Provider>
+    </KanbanContext.Provider>
   );
 };
 
+// Custom hooks to use the context
 export const useKanbanState = () => {
-  const context = useContext(KanbanStateContext);
+  const context = useContext(KanbanContext);
   if (context === undefined) {
     throw new Error('useKanbanState must be used within a KanbanProvider');
   }
-  return context;
+  return context.state;
 };
 
 export const useKanbanDispatch = () => {

@@ -27,7 +27,7 @@ function VerifyContent() {
 
     const verifyToken = async () => {
       try {
-        const response = await fetch(`${BACKEND_URL}/api/auth/verify`, { // Corrected backend verification endpoint
+        const response = await fetch(`${BACKEND_URL}/api/auth/verify-magic-link`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

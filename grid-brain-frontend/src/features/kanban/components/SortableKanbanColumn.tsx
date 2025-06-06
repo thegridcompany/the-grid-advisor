@@ -14,9 +14,12 @@ interface SortableKanbanColumnProps {
   focusedTaskId?: string | null;
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => void;
+  isAddingCard?: boolean;
+  onToggleAddingCard?: () => void;
 }
 
-export const SortableKanbanColumn: React.FC<SortableKanbanColumnProps> = ({ column, tasks, searchQuery, isFocused, focusedTaskId, onEditTask, onDeleteTask }) => {
+// This component makes a KanbanColumn sortable.
+export const SortableKanbanColumn: React.FC<SortableKanbanColumnProps> = ({ column, tasks, searchQuery, isFocused, focusedTaskId, onEditTask, onDeleteTask, isAddingCard, onToggleAddingCard }) => {
   const {
     attributes,
     listeners,
@@ -40,7 +43,7 @@ export const SortableKanbanColumn: React.FC<SortableKanbanColumnProps> = ({ colu
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes}>
+    <div ref={setNodeRef} style={style} {...attributes} className={isFocused ? 'ring-2 ring-offset-2 ring-offset-[#0D1117] ring-blue-500 rounded-lg' : ''}>
       <KanbanColumn
         id={column.id}
         title={column.title}
@@ -51,9 +54,11 @@ export const SortableKanbanColumn: React.FC<SortableKanbanColumnProps> = ({ colu
         dragHandleListeners={listeners}
         searchQuery={searchQuery}
         focusedTaskId={focusedTaskId}
-        className={isFocused ? 'ring-2 ring-offset-2 ring-offset-[#0D1117] ring-blue-500' : ''}
+        isFocused={isFocused}
         onEditTask={onEditTask}
         onDeleteTask={onDeleteTask}
+        isAddingCard={isAddingCard}
+        onToggleAddingCard={onToggleAddingCard}
       />
     </div>
   );

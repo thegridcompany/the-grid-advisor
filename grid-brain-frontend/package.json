@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "NODE_ENV=production node server.js",
     "lint": "next lint",
-    "test": "jest --clearCache --coverage",
+    "test": "jest --coverage",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "docker:up": "docker-compose up --build -d",
@@ -47,7 +47,8 @@
     "task-master-ai": "^0.16.0",
     "tremor": "^0.0.1",
     "zod": "^3.25.42",
-    "zustand": "^5.0.5"
+    "zustand": "^5.0.5",
+    "draft-js": "^0.11.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -69,6 +70,11 @@
     "tailwindcss": "^4",
     "ts-jest": "^29.3.4",
     "tw-animate-css": "^1.3.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "@types/react-beautiful-dnd": "^13.1.8",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/draft-js": "^0.11.18",
+    "autoprefixer": "^10.0.1",
+    "postcss": "^8"
   }
 }

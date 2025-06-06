@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Montserrat } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { HotkeyProvider } from "@/hooks/useHotkeys";
 import { Toaster } from "sonner";
 import "@/components/ui/scrollbar.css";
 
@@ -33,12 +34,14 @@ export default function RootLayout({
       >
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="dark"
           enableSystem
           disableTransitionOnChange
         >
-          {children}
-          <Toaster />
+          <HotkeyProvider>
+            {children}
+            <Toaster />
+          </HotkeyProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -6,6 +6,7 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Textarea } from '../../../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
+import { useHotkeys } from '@/hooks/useHotkeys';
 
 interface EditTaskModalProps {
   task: Task;
@@ -20,6 +21,10 @@ export const EditTaskModal: React.FC<EditTaskModalProps> = ({ task, isOpen, onCl
   useEffect(() => {
     setEditedTask(task);
   }, [task]);
+
+  useHotkeys([
+    ['Escape', onClose]
+  ], { enabled: isOpen, priority: 100 });
 
   if (!isOpen) {
     return null;

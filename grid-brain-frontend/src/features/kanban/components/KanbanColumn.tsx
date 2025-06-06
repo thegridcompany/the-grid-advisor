@@ -31,6 +31,8 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
   focusedTaskId,
   onEditTask,
   onDeleteTask,
+  isAddingCard,
+  onToggleAddingCard,
 }) => {
   const { setNodeRef, isOver } = useDroppable({
     id,
@@ -38,7 +40,6 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(title);
   const { updateColumnTitle, deleteColumn, updateColumnColor, addTask } = useKanbanDispatch();
-  const [isAddingCard, setIsAddingCard] = useState(false);
   const [newCardTitle, setNewCardTitle] = useState('');
 
   const handleTitleBlur = () => {
@@ -63,7 +64,7 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
     if (newCardTitle.trim()) {
       await addTask({ columnId: id, title: newCardTitle.trim() });
       setNewCardTitle('');
-      setIsAddingCard(false);
+      onToggleAddingCard?.();
     }
   };
 
@@ -73,7 +74,7 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
       handleAddCard();
     }
     if (e.key === 'Escape') {
-      setIsAddingCard(false);
+      onToggleAddingCard?.();
       setNewCardTitle('');
     }
   };
@@ -92,47 +93,53 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
     <div
       className={cn(
         'flex flex-col rounded-lg bg-[#161B22] w-[320px] h-full border border-[#30363D]',
-        'transition-all duration-200',
+        'transition-all duration-200 hover:border-[#444c56]',
         className
       )}
     >
       {/* Column Header */}
       <div 
-        className="p-3 border-b border-[#30363D] group"
+        className="p-4 border-b border-[#30363D] group"
         style={{ borderTop: `3px solid ${isOver ? '#3b82f6' : color || 'transparent'}`, transition: 'border-color 0.2s' }}
       >
-        <div className="flex justify-between items-center gap-2">
-          {dragHandleListeners && (
-            <DragHandle listeners={dragHandleListeners} />
-          )}
-          {isEditing ? (
-            <textarea
-              value={editedTitle}
-              onChange={(e) => setEditedTitle(e.target.value)}
-              onBlur={handleTitleBlur}
-              onKeyDown={handleKeyDown}
-              autoFocus
-              className="font-semibold text-base bg-transparent border border-blue-500 rounded-md p-1 w-full resize-none text-gray-100"
-            />
-          ) : (
-            <h3
-              onClick={() => setIsEditing(true)}
-              className="font-semibold text-base text-gray-200 cursor-pointer flex-grow"
-            >
-              {title}
-            </h3>
-          )}
-          <div className="flex items-center gap-1">
+        <div className="flex justify-between items-start gap-3 mb-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {dragHandleListeners && (
+              <DragHandle listeners={dragHandleListeners} className="text-gray-400" />
+            )}
+            {isEditing ? (
+              <textarea
+                value={editedTitle}
+                onChange={(e) => setEditedTitle(e.target.value)}
+                onBlur={handleTitleBlur}
+                onKeyDown={handleKeyDown}
+                autoFocus
+                className="font-semibold text-base bg-transparent border border-blue-500 rounded-md p-2 w-full resize-none text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={1}
+              />
+            ) : (
+              <h3
+                onClick={() => setIsEditing(true)}
+                className="font-semibold text-base text-gray-200 cursor-pointer flex-1 hover:text-gray-100 transition-colors truncate"
+                title={title}
+              >
+                {title}
+              </h3>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex-shrink-0">
             <ColorPicker onChange={handleColorChange} />
             <button 
               onClick={handleDelete}
-              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-gray-700"
-              aria-label="Delete column"
+              className="p-1.5 rounded-md hover:bg-red-900/50 transition-colors"
+              title={`Delete column "${title}"`}
             >
-              <TrashIcon className="w-4 h-4 text-gray-400" />
+              <TrashIcon className="w-4 h-4 text-gray-400 hover:text-red-400" />
             </button>
           </div>
         </div>
+        
         <TaskCounter 
           count={taskIds.length} 
           limit={limit}
@@ -159,9 +166,9 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
       </div>
       
       {/* Column Footer */}
-      <div className="p-2 pt-0">
+      <div className="p-3 pt-0 border-t border-[#30363D]/50">
         {isAddingCard ? (
-          <div className="p-1">
+          <div className="space-y-2">
             <textarea
               placeholder="Enter a title for this card..."
               autoFocus
@@ -173,31 +180,33 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
                 if (newCardTitle.trim()) {
                   handleAddCard();
                 } else {
-                  setIsAddingCard(false);
+                  onToggleAddingCard?.();
                 }
               }}
-              className="w-full bg-gray-900 rounded-md p-2 text-sm text-gray-200 placeholder-gray-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-[#21262D] border border-[#30363D] rounded-md p-3 text-sm text-gray-200 placeholder-gray-500 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              rows={2}
             />
-            <div className="flex items-center gap-2 mt-2">
+            <div className="flex items-center gap-2">
               <button 
                 onClick={handleAddCard}
-                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                disabled={!newCardTitle.trim()}
+                className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Add card
               </button>
               <button 
-                onClick={() => setIsAddingCard(false)}
-                className="p-1.5 rounded-md hover:bg-gray-700"
-                aria-label="Cancel adding card"
+                onClick={() => onToggleAddingCard?.()}
+                className="p-1.5 rounded-md hover:bg-gray-700 transition-colors"
+                title="Cancel"
               >
-                <XIcon className="w-5 h-5 text-gray-400" />
+                <XIcon className="w-4 h-4 text-gray-400" />
               </button>
             </div>
           </div>
         ) : (
           <button 
-            onClick={() => setIsAddingCard(true)}
-            className="w-full flex items-center gap-2 rounded-md p-2 text-sm text-gray-400 hover:bg-gray-700 hover:text-gray-200 transition-colors"
+            onClick={() => onToggleAddingCard?.()}
+            className="w-full flex items-center gap-2 rounded-md p-3 text-sm text-gray-400 hover:bg-[#21262D] hover:text-gray-200 transition-colors border border-dashed border-[#30363D] hover:border-[#444c56]"
           >
             <PlusIcon className="w-4 h-4" />
             Add a card
@@ -211,31 +220,64 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
 export const KanbanColumn = React.memo(KanbanColumnComponent);
 
 const ColorPicker = ({ onChange }: { onChange: (color: string) => void }) => {
-  const colors = ['#845EC2', '#D65DB1', '#FF6F91', '#FF9671', '#FFC75F', '#F9F871'];
+  const colors = [
+    { name: 'Purple', value: '#845EC2' },
+    { name: 'Pink', value: '#D65DB1' },
+    { name: 'Red', value: '#FF6F91' },
+    { name: 'Orange', value: '#FF9671' },
+    { name: 'Yellow', value: '#FFC75F' },
+    { name: 'Green', value: '#F9F871' },
+    { name: 'Blue', value: '#4ECDC4' },
+    { name: 'Indigo', value: '#45B7D1' }
+  ];
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className="relative">
-      <button onClick={() => setIsOpen(!isOpen)} className="p-1 rounded-md hover:bg-gray-700">
-        <PaletteIcon className="w-4 h-4 text-gray-400" />
+      <button 
+        onClick={() => setIsOpen(!isOpen)} 
+        className="p-1.5 rounded-md hover:bg-gray-700 transition-colors"
+        title="Change column color"
+      >
+        <PaletteIcon className="w-4 h-4 text-gray-400 hover:text-gray-200" />
       </button>
       {isOpen && (
-        <div className="absolute z-10 top-full right-0 mt-2 p-2 bg-gray-800 rounded-md shadow-lg border border-gray-700">
-          <div className="flex flex-wrap gap-2 w-24">
-            {colors.map(color => (
-              <button
-                key={color}
-                onClick={() => {
-                  onChange(color);
-                  setIsOpen(false);
-                }}
-                className="w-6 h-6 rounded-full"
-                style={{ backgroundColor: color }}
-                aria-label={`Set color to ${color}`}
-              />
-            ))}
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 z-10" 
+            onClick={() => setIsOpen(false)}
+          />
+          {/* Color palette */}
+          <div className="absolute z-20 top-full right-0 mt-2 p-3 bg-[#21262D] rounded-lg shadow-xl border border-[#30363D] min-w-[200px]">
+            <div className="text-xs font-medium text-gray-300 mb-2">Column Color</div>
+            <div className="grid grid-cols-4 gap-2">
+              {colors.map(color => (
+                <button
+                  key={color.value}
+                  onClick={() => {
+                    onChange(color.value);
+                    setIsOpen(false);
+                  }}
+                  className="group relative w-8 h-8 rounded-md border-2 border-[#30363D] hover:border-gray-400 transition-colors overflow-hidden"
+                  style={{ backgroundColor: color.value }}
+                  title={`Set color to ${color.name}`}
+                >
+                  <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity" />
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                onChange('transparent');
+                setIsOpen(false);
+              }}
+              className="w-full mt-2 px-2 py-1 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded transition-colors"
+            >
+              Remove color
+            </button>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

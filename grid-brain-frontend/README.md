@@ -22,6 +22,73 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Hotkey System
+
+This application uses a custom, priority-based hotkey system built with the `useHotkeys` hook and a `HotkeyProvider`. This system ensures that hotkeys operate predictably, especially when multiple components (like modals and the main board) are active.
+
+### Key Concepts
+
+- **Priority:** Each hotkey is registered with a numeric `priority`. Higher numbers have higher precedence. When a key is pressed, the handler with the highest priority is executed, and event propagation is stopped, preventing lower-priority handlers for the same key from firing.
+- **`HotkeyProvider`:** To enable the priority system, your application's root component (or a relevant parent) must be wrapped in the `HotkeyProvider`. This provider manages the global list of registered hotkeys.
+- **`useHotkeys` Hook:** This hook registers hotkeys for a component. It automatically handles cleanup when the component unmounts.
+
+### How to Use
+
+1.  **Wrap your app in `HotkeyProvider`:**
+
+    In your main `_app.tsx` or layout component:
+
+    ```tsx
+    import { HotkeyProvider } from "@/hooks/useHotkeys";
+
+    function MyApp({ Component, pageProps }) {
+      return (
+        <HotkeyProvider>
+          <Component {...pageProps} />
+        </HotkeyProvider>
+      );
+    }
+    ```
+
+2.  **Register hotkeys in your component:**
+
+    Use the `useHotkeys` hook, providing an array of hotkey definitions and an options object with the desired `priority`.
+
+    - **High Priority (e.g., for modals):** To ensure a modal's hotkeys (like `Escape` to close) are handled first.
+    - **Low Priority (e.g., for global actions):** For general application-wide shortcuts.
+
+    ```tsx
+    import { useHotkeys } from "@/hooks/useHotkeys";
+
+    const MyModal = () => {
+      const handleClose = () => {
+        // ... close modal logic
+      };
+
+      // High priority to override global hotkeys
+      useHotkeys([["Escape", handleClose]], { priority: 100 });
+
+      return <div>My Modal</div>;
+    };
+
+    const KanbanBoard = () => {
+      const handleAddTask = () => {
+        // ... add task logic
+      };
+
+      // Low priority for global actions
+      useHotkeys([["n", handleAddTask]], { priority: 1 });
+
+      return <div>Kanban Board</div>;
+    };
+    ```
+
+### Best Practices
+
+- **Modals and Overlays:** Always assign a high priority (e.g., `100`) to hotkeys for modals or other overlays to prevent underlying UI from reacting to key presses.
+- **Global Shortcuts:** Assign a low priority (e.g., `1`) to global shortcuts to ensure they don't interfere with more specific UI components.
+- **Scoping (Future):** The `scope` option is reserved for future enhancements, allowing for more granular control over when hotkeys are active.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

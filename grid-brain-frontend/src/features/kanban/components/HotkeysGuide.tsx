@@ -14,7 +14,13 @@ const Key = ({ children }: { children: React.ReactNode }) => (
 const hotkeys = [
   { keys: ['→', '←'], description: 'Sposta focus tra colonne' },
   { keys: ['↑', '↓'], description: 'Sposta focus tra task' },
-  { keys: ['/'], description: 'Apri ricerca rapida' },
+  { keys: ['Enter'], description: 'Modifica task selezionato' },
+  { keys: ['d'], description: 'Elimina task selezionato' },
+  { keys: ['Shift', '+', 'N'], description: 'Aggiungi task nella colonna' },
+  { keys: ['Shift', '+', 'D'], description: 'Elimina colonna selezionata' },
+  { keys: ['c'], description: 'Aggiungi nuova colonna' },
+  { keys: ['f'], description: 'Mostra/nascondi filtri' },
+  { keys: ['Esc'], description: 'Chiudi modali e pannelli' },
   { keys: ['?'], description: 'Mostra questa guida' },
 ];
 
@@ -25,7 +31,7 @@ interface HotkeysGuideProps {
 export const HotkeysGuide: React.FC<HotkeysGuideProps> = ({ onClose }) => {
   useHotkeys([
     ['Escape', onClose],
-  ]);
+  ], { priority: 100 });
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">

@@ -3,7 +3,8 @@ Authentication API endpoints.
 """
 from fastapi import APIRouter, HTTPException, Depends, Header, Body
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, Dict, Any, UUID, List, Callable
+from typing import Optional, Dict, Any, List, Callable
+from uuid import UUID
 
 from ..services.auth import AuthService
 from ..core.logging import get_logger

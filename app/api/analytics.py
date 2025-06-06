@@ -6,7 +6,8 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import pendulum
 
-from .auth import get_current_user
+from .auth import get_current_active_user
+from ..db.models import User
 from ..core.database import get_db_manager
 from ..core.logging import get_logger
 from ..ai.analyzer import AIAnalyzer
@@ -17,7 +18,7 @@ router = APIRouter()
 
 @router.get("/dashboard")
 async def get_dashboard_metrics(
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Get dashboard metrics for current user."""
     db = get_db_manager()
@@ -31,7 +32,7 @@ async def get_dashboard_metrics(
     # Get interactions count
     all_interactions = await db.get_many(
         "interactions",
-        filters={"team_member_id": current_user["id"]}
+        filters={"team_member_id": current_user.id}
     )
     
     today_interactions = [i for i in all_interactions if pendulum.parse(i["created_at"]) >= today_start]
@@ -41,7 +42,7 @@ async def get_dashboard_metrics(
     unresponded = await db.get_many(
         "interactions",
         filters={
-            "team_member_id": current_user["id"],
+            "team_member_id": current_user.id,
             "requires_response": True,
             "responded_at": None
         }
@@ -57,7 +58,7 @@ async def get_dashboard_metrics(
     alerts = await db.get_many(
         "alerts",
         filters={
-            "team_member_id": current_user["id"],
+            "team_member_id": current_user.id,
             "status": "pending"
         }
     )
@@ -83,7 +84,7 @@ async def get_dashboard_metrics(
 
 @router.get("/daily-briefing")
 async def get_daily_briefing(
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Get AI-generated daily briefing."""
     db = get_db_manager()
@@ -93,7 +94,7 @@ async def get_daily_briefing(
     yesterday = pendulum.yesterday()
     interactions = await db.get_many(
         "interactions",
-        filters={"team_member_id": current_user["id"]}
+        filters={"team_member_id": current_user.id}
     )
     
     yesterday_interactions = [
@@ -111,14 +112,14 @@ async def get_daily_briefing(
     
     # Generate briefing
     briefing = await ai_analyzer.generate_daily_briefing(
-        current_user["id"],
+        current_user.id,
         yesterday_interactions,
         metrics
     )
     
     # Save briefing to database
     briefing_data = {
-        "team_member_id": current_user["id"],
+        "team_member_id": current_user.id,
         "briefing_date": pendulum.today().isoformat(),
         **briefing
     }
@@ -130,7 +131,7 @@ async def get_daily_briefing(
 
 @router.get("/patterns")
 async def get_learned_patterns(
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: User = Depends(get_current_active_user),
     pattern_type: Optional[str] = Query(None),
     limit: int = Query(20, le=50)
 ):
@@ -153,7 +154,7 @@ async def get_learned_patterns(
 
 @router.get("/client-health")
 async def get_clients_health_overview(
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    current_user: User = Depends(get_current_active_user)
 ):
     """Get health overview of all clients."""
     db = get_db_manager()

@@ -17,8 +17,8 @@ from typing import Optional
 
 from .core.config import settings
 from .core.logging import setup_logging, get_logger
-from .core.database import get_supabase
-from .api import auth, email, interactions, clients, analytics, health, projects, tickets, realtime
+from .core.database import get_supabase, db_manager, SupabaseManager
+from .api import auth, email, interactions, clients, analytics, health, projects, tickets, realtime, kanban, llm, rag
 
 # Setup logging
 setup_logging()
@@ -144,28 +144,17 @@ app.include_router(health.router, prefix="/api/health", tags=["Health"])
 app.include_router(projects.router, prefix="/api/projects", tags=["Projects"])
 app.include_router(tickets.router, prefix="/api/tickets", tags=["Tickets"])
 app.include_router(realtime.router, prefix="/api/realtime", tags=["Real-time"])
+app.include_router(kanban.router, prefix="/api/kanban", tags=["Kanban"])
+app.include_router(llm.router, prefix="/api/llm", tags=["llm"])
+app.include_router(rag.router, prefix="/api/rag", tags=["rag"])
 
 
 # Global exception handler
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler."""
-    logger.error(f"Unhandled exception: {str(exc)}", exc_info=exc)
-    
-    if settings.is_development:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "Internal server error",
-                "detail": str(exc),
-                "type": type(exc).__name__
-            }
-        )
-    else:
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Internal server error"}
-        )
+async def global_exception_handler(request, exc):
+    """Catch-all exception handler to prevent leaking stack traces."""
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return {"detail": "An internal server error occurred."}
 
 
 # Custom 404 handler

@@ -1,9 +1,9 @@
 {
   "meta": {
-    "generatedAt": "2025-06-06T13:43:02.404Z",
+    "generatedAt": "2025-06-06T18:18:08.872Z",
     "tasksAnalyzed": 1,
-    "totalTasks": 18,
-    "analysisCount": 18,
+    "totalTasks": 20,
+    "analysisCount": 19,
     "thresholdScore": 5,
     "projectName": "Taskmaster",
     "usedResearch": true
@@ -152,6 +152,14 @@
       "recommendedSubtasks": 6,
       "expansionPrompt": "Break down the implementation of the advanced hotkey system into subtasks such as: requirements gathering, hotkey mapping design, integration with UI components (tasks and columns), command palette development, accessibility and conflict resolution, testing and QA, and documentation.",
       "reasoning": "This task involves designing and integrating a comprehensive hotkey system that interacts with multiple UI elements and workflows, including shortcuts for various actions and a command palette. The need for robust conflict handling, accessibility considerations, and thorough testing increases both cyclomatic and structural complexity. Multiple independent paths and integration points suggest a high complexity score and the need for several focused subtasks to ensure maintainability and quality[3][4][5]."
+    },
+    {
+      "taskId": 20,
+      "taskTitle": "Implement Full CRUD Operations for Kanban Tasks",
+      "complexityScore": 7,
+      "recommendedSubtasks": 6,
+      "expansionPrompt": "Break down the implementation of full CRUD operations for Kanban tasks into detailed subtasks covering backend API development, frontend state management, UI components, error handling, testing, and documentation.",
+      "reasoning": "This task involves both frontend and backend work with multiple interconnected components. The existing 4 subtasks cover the basics, but additional subtasks are needed for comprehensive error handling, testing, and documentation. The cyclomatic complexity is high due to multiple conditional paths in CRUD operations, and the coupling between frontend and backend components increases overall complexity."
     }
   ]
 }
