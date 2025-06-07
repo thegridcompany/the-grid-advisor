@@ -1,41 +1,130 @@
 # tests/core/test_config.py
 import pytest
+import os
+from unittest.mock import patch
 
-from app.core.config import settings, Settings
+# Import after setting test environment
+os.environ["ENVIRONMENT"] = "test"
+os.environ["TESTING"] = "true"
 
-def test_settings_default_environment():
-    """Test that the default environment is development."""
-    # Assuming the default environment in Settings class is 'development'
-    # or that .env file is not setting it to production for tests.
-    assert settings.environment == "development"
-    assert settings.is_development is True
-    assert settings.is_production is False
+from app.core.config import Settings
 
 
-def test_settings_production_environment(monkeypatch):
-    """Test that is_production and is_development reflect overridden environment."""
-    # Temporarily set the environment to production for this test
-    monkeypatch.setattr(settings, "environment", "production")
+def test_settings_initialization():
+    """Test that Settings can be initialized with test values."""
+    # Create settings with test environment variables
+    with patch.dict(os.environ, {
+        "SECRET_KEY": "test-secret",
+        "ENCRYPTION_KEY": "test-encryption",
+        "JWT_SECRET_KEY": "test-jwt",
+        "SUPABASE_URL": "https://test.supabase.co",
+        "SUPABASE_ANON_KEY": "test-anon",
+        "SUPABASE_SERVICE_KEY": "test-service",
+        "ANTHROPIC_API_KEY": "test-anthropic",
+        "OPENAI_API_KEY": "test-openai",
+        "SYSTEM_EMAIL_PASSWORD": "test-password",
+        "ENVIRONMENT": "test"
+    }):
+        settings = Settings()
+        assert settings.environment == "test"
+        assert settings.secret_key == "test-secret"
+        assert settings.supabase_url == "https://test.supabase.co"
+
+
+def test_settings_environment_properties():
+    """Test environment-related properties."""
+    # Test development environment
+    with patch.dict(os.environ, {"ENVIRONMENT": "development"}):
+        settings = Settings(
+            secret_key="test",
+            encryption_key="test",
+            jwt_secret_key="test",
+            supabase_url="test",
+            supabase_anon_key="test",
+            supabase_service_key="test",
+            anthropic_api_key="test",
+            openai_api_key="test",
+            system_email_password="test"
+        )
+        assert settings.is_development is True
+        assert settings.is_production is False
     
-    # Re-evaluate properties based on the new environment
-    # Note: Pydantic settings are often immutable or cached after first access.
-    # For a robust test of environment variable overriding, you might need to reload settings 
-    # or instantiate Settings directly with overridden env vars.
-    # This test checks if manually changing the attribute works as expected for the properties.
+    # Test production environment
+    with patch.dict(os.environ, {"ENVIRONMENT": "production"}):
+        settings = Settings(
+            secret_key="test",
+            encryption_key="test",
+            jwt_secret_key="test",
+            supabase_url="test",
+            supabase_anon_key="test",
+            supabase_service_key="test",
+            anthropic_api_key="test",
+            openai_api_key="test",
+            system_email_password="test"
+        )
+        assert settings.is_development is False
+        assert settings.is_production is True
 
-    # Create a new Settings instance with the monkeypatched environment if direct setattr doesn't re-evaluate
-    # This depends on how Settings is structured. For this example, let's assume direct setattr is sufficient
-    # or that the properties re-evaluate. A more robust way for pydantic-settings is to mock os.environ
-    # before settings are imported/instantiated if they load at import time.
-    
-    # Since settings is a global instance, monkeypatching its attribute is the most direct way here
-    # if its properties are defined to re-evaluate.
-    
-    assert settings.environment == "production"
-    assert settings.is_development is False
-    assert settings.is_production is True
 
-    # Clean up the monkeypatch (pytest does this automatically after the test)
+def test_settings_database_url():
+    """Test database URL construction from Supabase settings."""
+    settings = Settings(
+        secret_key="test",
+        encryption_key="test",
+        jwt_secret_key="test",
+        supabase_url="https://myproject.supabase.co",
+        supabase_anon_key="test",
+        supabase_service_key="test",
+        anthropic_api_key="test",
+        openai_api_key="test",
+        system_email_password="test"
+    )
+    
+    expected_url = "postgresql://postgres.myproject:@db.myproject.supabase.co:6543/postgres"
+    assert settings.database_url == expected_url
+
+
+def test_settings_default_values():
+    """Test that default values are set correctly."""
+    settings = Settings(
+        secret_key="test",
+        encryption_key="test",
+        jwt_secret_key="test",
+        supabase_url="test",
+        supabase_anon_key="test",
+        supabase_service_key="test",
+        anthropic_api_key="test",
+        openai_api_key="test",
+        system_email_password="test"
+    )
+    
+    # Check some default values
+    assert settings.app_name == "Grid Brain"
+    assert settings.app_version == "1.0.0"
+    assert settings.jwt_algorithm == "HS256"
+    assert settings.jwt_expiration_hours == 24
+    assert settings.host == "0.0.0.0"
+    assert settings.port == 8000
+    assert settings.log_level == "INFO"
+
+
+def test_settings_environment_validation():
+    """Test environment validation."""
+    with pytest.raises(ValueError) as exc_info:
+        Settings(
+            secret_key="test",
+            encryption_key="test",
+            jwt_secret_key="test",
+            supabase_url="test",
+            supabase_anon_key="test",
+            supabase_service_key="test",
+            anthropic_api_key="test",
+            openai_api_key="test",
+            system_email_password="test",
+            environment="invalid"
+        )
+    
+    assert "Environment must be one of" in str(exc_info.value)
 
 # Example of testing a specific setting value (if applicable)
 # def test_specific_app_name():
