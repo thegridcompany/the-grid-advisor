@@ -387,4 +387,21 @@ class Comment(BaseDBModel):
     content: str
     ticket_id: UUID  # Foreign Key to Ticket.id
     user_id: UUID  # Foreign Key to User.id
-    parent_comment_id: Optional[UUID] = None # For threaded comments 
+    parent_comment_id: Optional[UUID] = None # For threaded comments
+
+
+class RateType(str, Enum):
+    """Rate type options."""
+    HOURLY = "hourly"
+    DAILY = "daily"
+    FIXED = "fixed"
+
+
+class Rate(BaseDBModel):
+    """Rate model for the pricing engine."""
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    rate_type: RateType = Field(default=RateType.HOURLY)
+    currency: str = Field(default="USD", max_length=3)
+    cost: float = Field(..., gt=0)
+    is_active: bool = Field(default=True) 

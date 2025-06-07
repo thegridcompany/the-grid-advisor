@@ -18,7 +18,8 @@ from typing import Optional
 from .core.config import settings
 from .core.logging import setup_logging, get_logger
 from .core.database import get_supabase, db_manager, SupabaseManager
-from .api import auth, email, interactions, clients, analytics, health, projects, tickets, realtime, kanban, llm, rag
+from .api import auth, email, interactions, clients, analytics, health, projects, tickets, realtime, kanban, llm, rag, pricing
+from .api import proposals as proposals_router
 
 # Setup logging
 setup_logging()
@@ -135,18 +136,20 @@ async def metrics():
 
 
 # Include API routers
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(email.router, prefix="/api/email", tags=["Email"])
+app.include_router(auth.router, prefix=settings.API_V1_STR + "/auth", tags=["auth"])
+app.include_router(email.router, prefix=settings.API_V1_STR + "/email", tags=["email"])
 app.include_router(interactions.router, prefix="/api/interactions", tags=["Interactions"])
 app.include_router(clients.router, prefix="/api/clients", tags=["Clients"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(health.router, prefix="/api/health", tags=["Health"])
 app.include_router(projects.router, prefix="/api/projects", tags=["Projects"])
 app.include_router(tickets.router, prefix="/api/tickets", tags=["Tickets"])
-app.include_router(realtime.router, prefix="/api/realtime", tags=["Real-time"])
+app.include_router(realtime.router, prefix=settings.API_V1_STR + "/realtime", tags=["realtime"])
 app.include_router(kanban.router, prefix="/api/kanban", tags=["Kanban"])
-app.include_router(llm.router, prefix="/api/llm", tags=["llm"])
-app.include_router(rag.router, prefix="/api/rag", tags=["rag"])
+app.include_router(llm.router, prefix=settings.API_V1_STR + "/llm", tags=["llm"])
+app.include_router(rag.router, prefix=settings.API_V1_STR + "/rag", tags=["rag"])
+app.include_router(pricing.router, prefix=settings.API_V1_STR + "/pricing", tags=["pricing"])
+app.include_router(proposals_router.router, prefix=settings.API_V1_STR + "/proposals", tags=["proposals"])
 
 
 # Global exception handler
