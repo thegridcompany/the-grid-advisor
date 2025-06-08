@@ -17,8 +17,8 @@ from typing import Optional
 
 from .core.config import settings
 from .core.logging import setup_logging, get_logger
-from .core.database import get_supabase, db_manager, SupabaseManager
-from .api import auth, email, interactions, clients, analytics, health, projects, tickets, realtime, kanban, llm, rag, pricing
+from .core.database import get_supabase, db_manager, SupabaseClient
+from .api import auth, email, interactions, clients, analytics, health, projects, tickets, realtime, kanban, llm, rag, pricing, blueprints, workspaces, invitations
 from .api import proposals as proposals_router
 
 # Setup logging
@@ -150,6 +150,9 @@ app.include_router(llm.router, prefix=settings.API_V1_STR + "/llm", tags=["llm"]
 app.include_router(rag.router, prefix=settings.API_V1_STR + "/rag", tags=["rag"])
 app.include_router(pricing.router, prefix=settings.API_V1_STR + "/pricing", tags=["pricing"])
 app.include_router(proposals_router.router, prefix=settings.API_V1_STR + "/proposals", tags=["proposals"])
+app.include_router(blueprints.router, prefix="/api/blueprints", tags=["Blueprints"])
+app.include_router(workspaces.router, prefix="/api/workspaces", tags=["Workspaces"])
+app.include_router(invitations.router, prefix="/api/invitations", tags=["Invitations"])
 
 
 # Global exception handler

@@ -62,7 +62,7 @@ const KanbanColumnComponent: React.FC<KanbanColumnProps> = ({
 
   const handleAddCard = async () => {
     if (newCardTitle.trim()) {
-      await addTask({ columnId: id, title: newCardTitle.trim() });
+      await addTask({ columnId: id, title: newCardTitle.trim(), projectId: 'project-1' });
       setNewCardTitle('');
       onToggleAddingCard?.();
     }

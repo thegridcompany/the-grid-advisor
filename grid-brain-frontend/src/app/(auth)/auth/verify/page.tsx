@@ -9,7 +9,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || "http://localhost
 function VerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams.get("token");
+  const token = searchParams?.get("token") || null;
 
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("Verifying your magic link...");
@@ -27,7 +27,7 @@ function VerifyContent() {
 
     const verifyToken = async () => {
       try {
-        const response = await fetch(`${BACKEND_URL}/api/auth/verify-magic-link`, {
+        const response = await fetch(`${BACKEND_URL}/api/v1/auth/verify-magic-link`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -43,13 +43,21 @@ function VerifyContent() {
 
         // Backend should set an HTTPOnly session cookie upon successful verification.
         // The frontend doesn't need to handle the session token directly.
+        
+        // Store the token in a cookie if the backend returns it
+        if (data.access_token) {
+          document.cookie = `token=${data.access_token}; path=/; secure; samesite=strict`;
+        }
+        
         setMessage(data.message || "Successfully verified! Redirecting...");
         setStatus("success");
         
-        // Redirect to the main application page after successful verification
-        // You might want to redirect to a specific dashboard or user home page
+        // Get redirect URL from query params or default to home
+        const redirectUrl = new URLSearchParams(window.location.search).get("redirect") || "/";
+        
+        // Redirect to the original requested page or home
         setTimeout(() => {
-          router.replace("/"); // Or your desired redirect path e.g., /dashboard
+          router.replace(redirectUrl);
         }, 1500);
 
       } catch (err: unknown) {

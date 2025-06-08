@@ -83,6 +83,18 @@ class Settings(BaseSettings):
     # Frontend
     frontend_url: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
     
+    # API Configuration
+    API_V1_STR: str = "/api/v1"
+    
+    # JWT Settings (aliases for compatibility)
+    @property
+    def SECRET_KEY(self) -> str:
+        return self.secret_key
+    
+    @property
+    def ALGORITHM(self) -> str:
+        return self.jwt_algorithm
+    
     class Config:
         env_file = ".env"
         case_sensitive = False
@@ -90,7 +102,7 @@ class Settings(BaseSettings):
         
     @validator("environment")
     def validate_environment(cls, v):
-        allowed = ["development", "staging", "production"]
+        allowed = ["development", "staging", "production", "test"]
         if v not in allowed:
             raise ValueError(f"Environment must be one of: {allowed}")
         return v

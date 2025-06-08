@@ -5,12 +5,31 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Dict, Any
+import json
 
 from app.services.templating.engine import template_engine
 from app.services.pdf.generator import pdf_generator
-from pmconverter import prose2markdown
 
 router = APIRouter()
+
+def prose2markdown(content: Dict[str, Any]) -> str:
+    """
+    Convert prosemirror/editor content to markdown.
+    This is a simple implementation - could be enhanced based on actual editor format.
+    """
+    if isinstance(content, dict):
+        # If it's a complex editor structure, try to extract text
+        if 'content' in content:
+            return str(content['content'])
+        elif 'text' in content:
+            return str(content['text'])
+        else:
+            # Return JSON as formatted text for now
+            return json.dumps(content, indent=2)
+    elif isinstance(content, str):
+        return content
+    else:
+        return str(content)
 
 class ProposalRequest(BaseModel):
     title: str

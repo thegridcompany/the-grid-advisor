@@ -1,34 +1,51 @@
 """
 Project Management API endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import List, Optional
 from uuid import UUID
 
 from ..core.database import get_db_manager, DatabaseManager
 from ..core.logging import get_logger
-from ..db.models import Project, Epic, Ticket, Sprint, Comment, TicketStatus, TicketPriority
+from ..db.models import Project, Epic, Ticket, Sprint, Comment, TicketStatus, TicketPriority, ProjectMember
+from .auth import get_current_active_user, User
+from ..services.project_service import ProjectService
+from ..core.workspace import get_workspace_context
+from ..core.permission_middleware import require_permission
 
 logger = get_logger(__name__)
 router = APIRouter()
+project_service = ProjectService()
 
 
 # Project endpoints
 @router.get("/", response_model=List[Project])
 async def get_projects(
+    request: Request,
     limit: int = Query(50, le=100),
     offset: int = Query(0, ge=0),
-    db: DatabaseManager = Depends(get_db_manager)
+    current_user: User = Depends(get_current_active_user),
+    workspace_id: UUID = Depends(get_workspace_context),
+    _permission: bool = Depends(require_permission("project", "read")),
 ) -> List[Project]:
-    """Get all projects."""
+    """Get all projects the current user has access to."""
     try:
-        projects = await db.get_many(
-            "project", 
-            limit=limit, 
-            offset=offset,
-            order_by="-created_at"
+        workspace_role = getattr(request.state, "workspace_role", None)
+        if not workspace_role:
+            # Fallback or raise error if role is not set
+            # For now, let's assume a default role if not present, or handle appropriately
+            # This part might need to be adjusted once the role-setting middleware is in place
+            raise HTTPException(status_code=403, detail="Workspace role not found for user.")
+
+        projects = await project_service.get_user_projects(
+            user_id=current_user.id,
+            workspace_id=workspace_id,
+            role=workspace_role
         )
-        return [Project(**project) for project in projects]
+        
+        # The service should handle sorting and pagination if needed, or we can do it here.
+        # For now, returning the raw list from the service.
+        return projects
     except Exception as e:
         logger.error("Failed to get projects", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve projects")
@@ -37,12 +54,31 @@ async def get_projects(
 @router.get("/{project_id}", response_model=Project)
 async def get_project(
     project_id: UUID,
-    db: DatabaseManager = Depends(get_db_manager)
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    workspace_id: UUID = Depends(get_workspace_context),
+    db: DatabaseManager = Depends(get_db_manager),
+    _permission: bool = Depends(require_permission("project", "read")),
 ) -> Project:
     """Get a specific project."""
     try:
+        workspace_role = getattr(request.state, "workspace_role", None)
+        if not workspace_role:
+            raise HTTPException(status_code=403, detail="Workspace role not found for user.")
+
+        can_access = await project_service.can_access_project(
+            user_id=current_user.id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            role=workspace_role
+        )
+
+        if not can_access:
+            raise HTTPException(status_code=404, detail="Project not found or access denied")
+
         project = await db.get_by_id("project", str(project_id))
         if not project:
+            # This case should technically be covered by can_access, but as a safeguard:
             raise HTTPException(status_code=404, detail="Project not found")
         return Project(**project)
     except HTTPException:
@@ -55,7 +91,8 @@ async def get_project(
 @router.post("/", response_model=Project)
 async def create_project(
     project: Project,
-    db: DatabaseManager = Depends(get_db_manager)
+    db: DatabaseManager = Depends(get_db_manager),
+    _permission: bool = Depends(require_permission("project", "create")),
 ) -> Project:
     """Create a new project."""
     try:
@@ -71,7 +108,8 @@ async def create_project(
 async def update_project(
     project_id: UUID,
     project: Project,
-    db: DatabaseManager = Depends(get_db_manager)
+    db: DatabaseManager = Depends(get_db_manager),
+    _permission: bool = Depends(require_permission("project", "update")),
 ) -> Project:
     """Update a project."""
     try:
@@ -90,7 +128,8 @@ async def update_project(
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: UUID,
-    db: DatabaseManager = Depends(get_db_manager)
+    db: DatabaseManager = Depends(get_db_manager),
+    _permission: bool = Depends(require_permission("project", "delete")),
 ) -> dict:
     """Delete a project."""
     try:

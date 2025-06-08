@@ -3,8 +3,10 @@ import { Inter, Montserrat } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { HotkeyProvider } from "@/hooks/useHotkeys";
+import { ProjectProvider } from "@/contexts/ProjectContext";
 import { Toaster } from "sonner";
 import "@/components/ui/scrollbar.css";
+import { WorkspaceProvider } from "@/components/workspace/WorkspaceProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -38,10 +40,14 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <HotkeyProvider>
-            {children}
-            <Toaster />
-          </HotkeyProvider>
+          <ProjectProvider>
+            <HotkeyProvider>
+              <WorkspaceProvider>
+                {children}
+              </WorkspaceProvider>
+              <Toaster />
+            </HotkeyProvider>
+          </ProjectProvider>
         </ThemeProvider>
       </body>
     </html>

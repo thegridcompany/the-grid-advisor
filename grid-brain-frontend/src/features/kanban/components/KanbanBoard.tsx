@@ -10,7 +10,7 @@ import { KanbanColumn } from './KanbanColumn';
 import { KanbanTaskCard } from './KanbanTaskCard';
 import { SortableKanbanColumn } from './SortableKanbanColumn';
 import { KanbanToolbar } from './KanbanToolbar';
-import { Task, Column, KanbanBoardProps } from '../types'; // Added Column back
+import { Task, Column, KanbanBoardProps } from '../types';
 
 interface Command {
   id: string;
@@ -21,6 +21,7 @@ interface Command {
 }
 
 import { useKanbanState, useKanbanDispatch } from '../state/kanbanContext';
+import { useProject } from '@/contexts/ProjectContext';
 import { useIsClient } from '@/hooks/useIsClient'; // Import the new hook
 import { useHotkeys } from '@/hooks/useHotkeys';
 import { cn } from '@/lib/utils';
@@ -31,69 +32,16 @@ const LazyFilterPanel = lazy(() =>
   import('./FilterPanel').then(module => ({ default: module.FilterPanel }))
 );
 
-// Default sample data - ensure these are exported for the provider
-export const defaultTasks: Task[] = [
-  {
-    id: 'task-1',
-    title: 'Design login page mockups',
-    description: 'Create wireframes and high-fidelity mockups for the authentication flow',
-    priority: 'high',
-    assignee: 'Designer'
-  },
-  {
-    id: 'task-2',
-    title: 'Set up authentication API',
-    description: 'Implement JWT-based authentication with FastAPI',
-    priority: 'high',
-    assignee: 'Backend Dev'
-  },
-  {
-    id: 'task-3',
-    title: 'Write unit tests for user service',
-    description: 'Add comprehensive test coverage for user-related functionality',
-    priority: 'medium',
-    assignee: 'QA Engineer'
-  },
-  {
-    id: 'task-4',
-    title: 'Research drag and drop libraries',
-    description: 'Evaluate @dnd-kit vs react-beautiful-dnd for Kanban implementation',
-    priority: 'low',
-    assignee: 'Frontend Dev'
-  },
-  {
-    id: 'task-5',
-    title: 'Database schema design',
-    description: 'Design PostgreSQL schema for board and task management',
-    priority: 'high',
-    assignee: 'Backend Dev'
-  }
-];
-
-export const defaultColumns: Column[] = [
-  {
-    id: 'backlog',
-    title: 'Backlog',
-    taskIds: ['task-1', 'task-2', 'task-4']
-  },
-  {
-    id: 'sprint',
-    title: 'Sprint',
-    taskIds: ['task-3']
-  },
-  {
-    id: 'done',
-    title: 'Done',
-    taskIds: ['task-5']
-  }
-];
+// NOTA: I dati di default sono stati rimossi. Il componente ora si affida
+// esclusivamente ai dati caricati dal provider di contesto (`KanbanProvider`).
+// Questo previene errori di tipo e assicura che il componente sia sempre
+// sincronizzato con lo stato reale dell'applicazione.
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
-  // onTaskUpdate, // Removed
-  // onColumnUpdate, // Removed
   isLoading: isLoadingProp,
   className 
 }) => {
+  const { currentProject } = useProject();
   const { tasks, columns, columnOrder, isLoading: isLoadingState } = useKanbanState();
   const { moveTask, addColumn, moveColumn, updateTask, deleteTask, deleteColumn } = useKanbanDispatch();
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -143,8 +91,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   };
 
   const handleAddNewColumn = () => {
-    // Potremmo aprire un modale per chiedere il titolo, ma per ora usiamo un default.
-    addColumn("New Column");
+    if (!currentProject) {
+      console.warn('No project selected');
+      return;
+    }
+    addColumn({ name: "New Column", projectId: currentProject.id });
   };
 
   useHotkeys([
@@ -324,7 +275,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       const targetIndex = columnOrder.indexOf(overId);
 
       if (sourceIndex !== -1 && targetIndex !== -1) {
-        await moveColumn(sourceIndex, targetIndex);
+        // La firma della funzione richiede anche il columnId
+        await moveColumn(sourceIndex, targetIndex, activeId);
       }
       return;
     }
@@ -378,13 +330,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
     console.log('Drag ended:', { activeId, sourceColumnId, sourceTaskIndex, targetColumnId, targetTaskIndex, overId });
 
-    await moveTask({
-        taskId: activeId,
-        sourceColumnId: sourceColumnId,
-        sourceIndex: sourceTaskIndex,
-        targetColumnId: targetColumnId,
-        targetIndex: targetTaskIndex, 
-    });
+    if (sourceColumnId && targetColumnId && sourceTaskIndex !== -1 && targetTaskIndex !== -1) {
+      await moveTask(activeId, sourceColumnId, targetColumnId, targetTaskIndex);
+    }
 
     // The onTaskMove prop is removed, logic is now in the reducer via dispatch
     // if (onTaskMove) { ... }
@@ -395,13 +343,31 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   };
   
   const handleSaveTask = (updatedTask: Task) => {
-    updateTask(updatedTask);
+    // La funzione si aspetta l'ID del task e un oggetto con i campi da aggiornare
+    const { id, ...updatePayload } = updatedTask;
+    updateTask(id, updatePayload);
     setEditingTask(null);
   };
 
   const handleDeleteTask = (taskId: string) => {
     deleteTask(taskId);
   };
+
+  // Show message if no project is selected
+  if (!currentProject) {
+    return (
+      <div className={cn("flex items-center justify-center h-full", className)}>
+        <div className="text-center space-y-4">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+            No Project Selected
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400">
+            Please select a project to view the Kanban board.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return <div className="p-6 text-center">Loading Kanban board...</div>;

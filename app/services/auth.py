@@ -10,17 +10,15 @@ import secrets
 import pendulum
 import asyncio
 from functools import partial
-from passlib.context import CryptContext
 
 from ..core.database import get_db_manager, get_supabase
 from ..core.config import settings
 from ..core.logging import get_logger
 from ..email.client import EmailClient
-from ..db.models import TeamMember, User, UserRole
+from ..db.models import TeamMember, User, UserRole, Workspace, WorkspaceMember
+from ..core.auth import pwd_context, create_access_token, verify_password, get_password_hash
 
 logger = get_logger(__name__)
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class AuthService:
@@ -180,53 +178,6 @@ class AuthService:
         except Exception as e:
             logger.error(f"Failed to verify access token: {str(e)}")
             return None
-    
-    def _generate_magic_token(self, team_member_id: str, email: str) -> str:
-        """Generate magic link JWT token."""
-        expires_at = datetime.utcnow() + timedelta(minutes=15)  # 15 minutes expiry
-        
-        payload = {
-            "sub": team_member_id,
-            "email": email,
-            "type": "magic_link",
-            "exp": expires_at,
-            "iat": datetime.utcnow(),
-            "jti": str(uuid4())  # Unique token ID
-        }
-        
-        return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
-    
-    def _generate_access_token(self, team_member: Dict[str, Any]) -> str:
-        """Generate access JWT token."""
-        expires_at = datetime.utcnow() + timedelta(hours=settings.jwt_expiration_hours)
-        
-        payload = {
-            "sub": team_member["id"],
-            "email": team_member["email"],
-            "name": team_member["name"],
-            "role": team_member["role"],
-            "type": "access",
-            "exp": expires_at,
-            "iat": datetime.utcnow()
-        }
-        
-        return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
-    
-    def _generate_access_token_for_user(self, user: User) -> str:
-        """Generate access JWT token for a User."""
-        expires_at = datetime.utcnow() + timedelta(hours=settings.jwt_expiration_hours)
-        
-        payload = {
-            "sub": str(user.id),
-            "email": user.email,
-            "username": user.username,
-            "role": user.role.value,
-            "type": "access",
-            "exp": expires_at,
-            "iat": datetime.utcnow()
-        }
-        
-        return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
     
     async def _get_team_member_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get team member by email."""
@@ -392,7 +343,7 @@ Grid Brain AI
             if existing_by_username:
                 return {"status": "error", "message": "User with this username already exists"}
 
-            hashed_password = pwd_context.hash(password)
+            hashed_password = get_password_hash(password)
             
             user_data = {
                 "username": username,
@@ -429,7 +380,7 @@ Grid Brain AI
         
         user_dict = users[0] # Assuming email is unique
         
-        if not pwd_context.verify(password, user_dict.get("hashed_password")):
+        if not verify_password(password, user_dict.get("hashed_password")):
             return None
         
         # Convert dict to User model instance
@@ -459,21 +410,40 @@ Grid Brain AI
         """Get user by ID."""
         user_dict = await self.db.get_by_id("users", str(user_id)) # Ensure ID is string for DB
         if not user_dict:
-            return None
+            # Fallback to check team_members if no user is found
+            team_member_dict = await self.db.get_by_id("team_members", str(user_id))
+            if not team_member_dict:
+                return None
+            # Adapt team_member dict to a User-like structure
+            # This is a temporary adaptation. A unified user model is better.
+            return User(
+                id=team_member_dict["id"],
+                email=team_member_dict["email"],
+                username=team_member_dict["email"].split('@')[0], # Generate username
+                role=UserRole.TECH_LEAD if team_member_dict["role"] == "CTO" else UserRole.CONSULTANT_PO, # Map role
+                is_active=team_member_dict["is_active"],
+                first_name=team_member_dict["name"].split(" ")[0],
+                last_name=" ".join(team_member_dict["name"].split(" ")[1:]),
+                hashed_password="" # No password for team members
+            )
+
         try:
             user_dict["role"] = UserRole(user_dict["role"])
+            # Add placeholder fields that might be missing from DB dict
+            user_dict.setdefault('first_name', None)
+            user_dict.setdefault('last_name', None)
             return User(**user_dict)
         except Exception as e:
             logger.error(f"Failed to parse user data for ID {user_id}: {e}")
             return None
 
     async def verify_user_access_token(self, token: str) -> Optional[User]:
-        """Verify access token and return User model instance."""
+        """Verify access token and return User model instance with workspace context."""
         try:
             payload = jwt.decode(
                 token,
-                settings.jwt_secret_key,
-                algorithms=[settings.jwt_algorithm]
+                settings.SECRET_KEY, # Use the main secret key
+                algorithms=[settings.ALGORITHM]
             )
             user_id_str = payload.get("sub")
             if not user_id_str:
@@ -483,13 +453,16 @@ Grid Brain AI
             
             if not user or not user.is_active:
                 return None
-            
-            # Optionally, check token type if you have different types
-            # if payload.get("type") != "access":
-            #     return None
 
+            # Attach workspace context from token to the user object
+            user.current_workspace_id = payload.get("workspace_id")
+            user.current_workspace_role = payload.get("workspace_role")
+            
             return user
             
+        except exceptions.JWTError:
+            logger.warning(f"Invalid JWT token received.")
+            return None
         except Exception as e:
             logger.error(f"Failed to verify user access token: {str(e)}")
             return None 

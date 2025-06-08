@@ -1,0 +1,99 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Brain, BarChart3, Users, Shield } from 'lucide-react';
+
+export default function LandingPage() {
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    // Check if user has a token
+    const token = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('token='))
+      ?.split('=')[1];
+
+    if (token) {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  // If authenticated, show different content or redirect
+  if (isAuthenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold mb-4">Welcome back!</h1>
+          <Button onClick={() => router.push('/dashboard')}>
+            Go to Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Landing page for non-authenticated users
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
+      {/* Hero Section */}
+      <header className="p-6 flex justify-between items-center">
+        <div className="flex items-center space-x-2">
+          <Brain className="h-8 w-8 text-brandOrange" />
+          <span className="text-xl font-bold">Grid Brain</span>
+        </div>
+        <Link href="/auth/login">
+          <Button>Sign In</Button>
+        </Link>
+      </header>
+
+      <main className="container mx-auto px-6 py-16">
+        <div className="text-center mb-16">
+          <h1 className="text-5xl font-bold mb-6">
+            AI-Powered Business Intelligence
+          </h1>
+          <p className="text-xl text-muted-foreground mb-8">
+            Empower your decisions with Grid Brain's advanced analytics
+          </p>
+          <Link href="/auth/login">
+            <Button size="lg" className="text-lg px-8">
+              Get Started
+            </Button>
+          </Link>
+        </div>
+
+        {/* Features */}
+        <div className="grid md:grid-cols-3 gap-8 mt-20">
+          <div className="text-center p-6">
+            <BarChart3 className="h-12 w-12 text-brandOrange mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2">Advanced Analytics</h3>
+            <p className="text-muted-foreground">
+              Real-time insights and predictive analytics for your business
+            </p>
+          </div>
+          <div className="text-center p-6">
+            <Users className="h-12 w-12 text-brandOrange mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2">Team Collaboration</h3>
+            <p className="text-muted-foreground">
+              Work together seamlessly with workspace management
+            </p>
+          </div>
+          <div className="text-center p-6">
+            <Shield className="h-12 w-12 text-brandOrange mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2">Enterprise Security</h3>
+            <p className="text-muted-foreground">
+              Bank-level security with role-based access control
+            </p>
+          </div>
+        </div>
+      </main>
+
+      <footer className="text-center p-6 text-muted-foreground">
+        <p>© {new Date().getFullYear()} The Grid Company. All rights reserved.</p>
+      </footer>
+    </div>
+  );
+} 

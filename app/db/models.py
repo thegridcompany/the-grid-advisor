@@ -404,4 +404,119 @@ class Rate(BaseDBModel):
     rate_type: RateType = Field(default=RateType.HOURLY)
     currency: str = Field(default="USD", max_length=3)
     cost: float = Field(..., gt=0)
-    is_active: bool = Field(default=True) 
+    is_active: bool = Field(default=True)
+
+
+class ProjectMember(BaseDBModel):
+    """Project membership model for authorization."""
+    project_id: UUID  # Foreign Key to Project.id
+    user_id: UUID     # Foreign Key to User.id
+    role: Optional[str] = Field(default="member", max_length=50)  # member, admin, viewer
+    joined_at: Optional[datetime] = None
+
+    class Config:
+        # Ensure unique combination of project_id and user_id
+        schema_extra = {
+            "example": {
+                "project_id": "123e4567-e89b-12d3-a456-426614174000",
+                "user_id": "123e4567-e89b-12d3-a456-426614174001",
+                "role": "member"
+            }
+        }
+
+
+class Blueprint(BaseDBModel):
+    """Blueprint model for project documentation."""
+    title: str = Field(..., min_length=1, max_length=255)
+    content: Dict[str, Any] = Field(default_factory=dict)  # JSON content from editor
+    project_id: UUID  # Foreign Key to Project.id
+    author_id: Optional[UUID] = None  # Foreign Key to User.id
+    version: int = Field(default=1, ge=1)
+    status: Literal["draft", "review", "approved", "archived"] = "draft"
+    tags: List[str] = Field(default_factory=list)
+
+
+class Proposal(BaseDBModel):
+    """Proposal model for client proposals."""
+    title: str = Field(..., min_length=1, max_length=255)
+    client_name: str = Field(..., min_length=1, max_length=255)
+    content: Dict[str, Any] = Field(default_factory=dict)  # JSON content from editor
+    project_id: Optional[UUID] = None  # Foreign Key to Project.id
+    blueprint_id: Optional[UUID] = None  # Foreign Key to Blueprint.id
+    author_id: Optional[UUID] = None  # Foreign Key to User.id
+    status: Literal["draft", "sent", "accepted", "rejected", "expired"] = "draft"
+    client_email: Optional[EmailStr] = None
+    sent_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    total_amount: Optional[float] = None
+    currency: str = Field(default="EUR", max_length=3)
+    tags: List[str] = Field(default_factory=list)
+
+
+class RoleEnum(str, Enum):
+    """Workspace roles."""
+    SUPER_ADMIN = "super_admin"
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
+    CLIENT = "client"
+    VIEWER = "viewer"
+
+
+class Workspace(BaseDBModel):
+    """Workspace model."""
+    name: str = Field(..., min_length=1, max_length=255)
+    slug: str = Field(..., min_length=1, max_length=255, unique=True)
+    description: Optional[str] = None
+    is_active: bool = Field(default=True)
+    owner_id: UUID  # Foreign Key to User.id
+    settings: Dict[str, Any] = Field(default_factory=dict)
+    domain: Optional[str] = None
+
+
+class WorkspaceMember(BaseDBModel):
+    """Workspace membership model."""
+    workspace_id: UUID  # Foreign Key to Workspace.id
+    user_id: UUID      # Foreign Key to User.id
+    role: RoleEnum = Field(default=RoleEnum.MEMBER)
+    is_active: bool = Field(default=True)
+    joined_at: Optional[datetime] = None
+    invited_by: Optional[UUID] = None  # Foreign Key to User.id
+
+
+class InvitationStatus(str, Enum):
+    """User invitation status."""
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    EXPIRED = "expired"
+    CANCELED = "canceled"
+
+
+class UserInvitation(BaseDBModel):
+    """User invitation model."""
+    email: EmailStr
+    workspace_id: UUID  # Foreign Key to Workspace.id
+    role: RoleEnum = Field(default=RoleEnum.MEMBER)
+    invited_by: UUID  # Foreign Key to User.id
+    expires_at: datetime
+    accepted_at: Optional[datetime] = None
+    token: str = Field(..., unique=True)
+    status: InvitationStatus = Field(default=InvitationStatus.PENDING)
+
+
+class InvitationCreate(BaseModel):
+    email: EmailStr
+    role: RoleEnum = Field(default=RoleEnum.MEMBER)
+
+
+class InvitationResponse(BaseModel):
+    id: UUID
+    email: EmailStr
+    role: RoleEnum
+    workspace_id: UUID
+    invited_by: UUID
+    expires_at: datetime
+    status: InvitationStatus
+
+    class Config:
+        from_attributes = True 

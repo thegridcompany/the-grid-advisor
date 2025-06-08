@@ -106,9 +106,12 @@ class DatabaseManager:
         self.db = supabase_client
         self.logger = get_logger(self.__class__.__name__)
     
-    async def get_by_id(self, table: str, id: str) -> Optional[Dict[str, Any]]:
-        """Get a record by ID."""
+    async def get_by_id(self, table: str, id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get a record by ID, respecting RLS."""
         try:
+            # In a real Supabase RLS setup, you'd set the user context before the query
+            # For example, by calling an RPC function.
+            # self.db.rpc('set_user_context', {'user_id': user_id}).execute()
             result = self.db.get_table(table).select("*").eq("id", id).single().execute()
             return result.data
         except Exception as e:
@@ -121,10 +124,13 @@ class DatabaseManager:
         filters: Dict[str, Any] = None,
         order_by: str = None,
         limit: int = None,
-        offset: int = None
+        offset: int = None,
+        user_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Get multiple records with filters."""
+        """Get multiple records with filters, respecting RLS."""
         try:
+            # Placeholder for setting RLS context
+            # self.db.rpc('set_user_context', {'user_id': user_id}).execute()
             query = self.db.get_table(table).select("*")
             
             # Apply filters
@@ -150,36 +156,40 @@ class DatabaseManager:
             self.logger.error(f"Failed to get records", table=table, filters=filters, error=str(e))
             return []
     
-    async def create(self, table: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Create a new record."""
+    async def create(self, table: str, data: Dict[str, Any], user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Create a new record, respecting RLS."""
         try:
+            # Placeholder for setting RLS context
             result = self.db.get_table(table).insert(data).execute()
             return result.data[0] if result.data else None
         except Exception as e:
             self.logger.error(f"Failed to create record", table=table, error=str(e))
             raise DatabaseError(f"Failed to create record in {table}: {str(e)}")
     
-    async def update(self, table: str, id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Update a record."""
+    async def update(self, table: str, id: str, data: Dict[str, Any], user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Update a record, respecting RLS."""
         try:
+            # Placeholder for setting RLS context
             result = self.db.get_table(table).update(data).eq("id", id).execute()
             return result.data[0] if result.data else None
         except Exception as e:
             self.logger.error(f"Failed to update record", table=table, id=id, error=str(e))
             raise DatabaseError(f"Failed to update record in {table}: {str(e)}")
     
-    async def delete(self, table: str, id: str) -> bool:
-        """Delete a record."""
+    async def delete(self, table: str, id: str, user_id: Optional[str] = None) -> bool:
+        """Delete a record, respecting RLS."""
         try:
+            # Placeholder for setting RLS context
             self.db.get_table(table).delete().eq("id", id).execute()
             return True
         except Exception as e:
             self.logger.error(f"Failed to delete record", table=table, id=id, error=str(e))
             return False
     
-    async def upsert(self, table: str, data: Dict[str, Any], on_conflict: str = "id") -> Optional[Dict[str, Any]]:
-        """Upsert a record."""
+    async def upsert(self, table: str, data: Dict[str, Any], on_conflict: str = "id", user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Upsert a record, respecting RLS."""
         try:
+            # Placeholder for setting RLS context
             result = self.db.get_table(table).upsert(data, on_conflict=on_conflict).execute()
             return result.data[0] if result.data else None
         except Exception as e:

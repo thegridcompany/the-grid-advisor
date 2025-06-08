@@ -5,9 +5,20 @@ WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    # Build essentials
     gcc \
     g++ \
+    # PostgreSQL
     libpq-dev \
+    # WeasyPrint dependencies (as per official docs for Debian ≥ 11)
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz-subset0 \
+    # Additional dependencies for building without wheels
+    libjpeg-dev \
+    libopenjp2-7-dev \
+    libffi-dev \
+    # Clean up
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching

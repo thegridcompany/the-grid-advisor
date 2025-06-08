@@ -116,6 +116,39 @@ async def get_kanban_tasks_for_column(
         logger.error("Failed to get Kanban tasks", column_id=str(column_id), error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve Kanban tasks")
 
+@router.get("/tasks/project/{project_id}", response_model=List[KanbanTask])
+async def get_kanban_tasks_for_project(
+    project_id: UUID,
+    db: DatabaseManager = Depends(get_db_manager)
+) -> List[KanbanTask]:
+    """Get all Kanban tasks for a specific project."""
+    try:
+        # First get all columns for this project
+        columns = await db.get_many(
+            "kanban_columns",
+            filters={"project_id": str(project_id)}
+        )
+        column_ids = [col["id"] for col in columns]
+        
+        if not column_ids:
+            return []  # No columns means no tasks
+        
+        # Then get all tasks for these columns
+        # Since get_many doesn't support IN queries, we'll need to get tasks for each column
+        all_tasks = []
+        for column_id in column_ids:
+            tasks = await db.get_many(
+                "kanban_tasks",
+                filters={"column_id": column_id},
+                order_by="position"
+            )
+            all_tasks.extend(tasks)
+        
+        return [KanbanTask(**t) for t in all_tasks]
+    except Exception as e:
+        logger.error("Failed to get Kanban tasks for project", project_id=str(project_id), error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve Kanban tasks for project")
+
 @router.get("/tasks/{task_id}", response_model=KanbanTask)
 async def get_kanban_task(
     task_id: UUID,
@@ -169,11 +202,16 @@ async def delete_kanban_task(
         logger.error("Failed to delete Kanban task", task_id=str(task_id), error=str(e))
         raise HTTPException(status_code=500, detail="Failed to delete Kanban task")
 
-@router.patch("/tasks/{task_id}/move")
+from pydantic import BaseModel
+
+class MoveTaskRequest(BaseModel):
+    new_column_id: UUID
+    new_position: int
+
+@router.put("/tasks/{task_id}/move")
 async def move_kanban_task(
     task_id: UUID,
-    new_column_id: UUID,
-    new_position: int,
+    move_data: MoveTaskRequest,
     db: DatabaseManager = Depends(get_db_manager)
 ) -> dict:
     """Move a Kanban task to a new column and/or position."""
@@ -185,8 +223,8 @@ async def move_kanban_task(
             raise HTTPException(status_code=404, detail="Kanban task not found")
 
         update_data = {
-            "column_id": str(new_column_id),
-            "position": new_position
+            "column_id": str(move_data.new_column_id),
+            "position": move_data.new_position
         }
         updated_task = await db.update("kanban_tasks", str(task_id), update_data)
         if not updated_task:

@@ -130,12 +130,78 @@ async def seed_sample_clients():
             logger.error(f"Failed to create client {client['name']}: {str(e)}")
 
 
+async def migrate_to_workspace_system():
+    """Migrate existing data to a multi-tenant workspace system."""
+    logger.info("Starting workspace data migration...")
+    db = get_db_manager()
+
+    try:
+        # 1. Get Super Admin ID (Paolo)
+        paolo = await db.get_many("team_members", filters={"email": "paolo.biancalana@thegridcompany.it"})
+        if not paolo:
+            logger.error("Super admin 'Paolo Biancalana' not found. Aborting migration.")
+            return
+        owner_id = paolo[0]['id']
+
+        # 2. Create default workspace
+        default_workspace = {
+            'id': str(uuid4()),
+            'name': 'The Grid Company',
+            'slug': 'thegrid',
+            'description': 'Default workspace for The Grid Company',
+            'owner_id': owner_id,
+            'domain': 'thegridcompany.it'
+        }
+        existing_workspace = await db.get_many("workspaces", filters={"slug": "thegrid"})
+        if not existing_workspace:
+            created_workspace = await db.create("workspaces", default_workspace)
+            workspace_id = created_workspace['id']
+            logger.info("Created default workspace.")
+        else:
+            workspace_id = existing_workspace[0]['id']
+            logger.info("Default workspace already exists.")
+
+        # 3. Associate team members with default workspace
+        team_members = await db.get_many("team_members", filters={"is_active": True})
+        for member in team_members:
+            existing_member = await db.get_many("workspace_members", filters={"workspace_id": workspace_id, "user_id": member['id']})
+            if not existing_member:
+                await db.create("workspace_members", {
+                    'id': str(uuid4()),
+                    'workspace_id': workspace_id,
+                    'user_id': member['id'],
+                    'role': 'ADMIN' if member['role'] in ['CTO', 'CEO'] else 'MEMBER'
+                })
+                logger.info(f"Added team member {member['name']} to default workspace.")
+
+        # 4. Associate clients (as users) with default workspace
+        clients = await db.get_many("clients", filters={"status": "active"})
+        for client in clients:
+            # This assumes client ID can be treated as a user ID.
+            # A more robust solution might involve a separate 'users' table.
+            existing_member = await db.get_many("workspace_members", filters={"workspace_id": workspace_id, "user_id": client['id']})
+            if not existing_member:
+                await db.create("workspace_members", {
+                    'id': str(uuid4()),
+                    'workspace_id': workspace_id,
+                    'user_id': client['id'],
+                    'role': 'MEMBER'
+                })
+                logger.info(f"Added client {client['name']} to default workspace as user.")
+        
+        logger.info("Workspace data migration completed successfully.")
+
+    except Exception as e:
+        logger.error(f"An error occurred during workspace migration: {str(e)}")
+
+
 async def main():
     """Run all seed functions."""
     logger.info("Starting data seeding...")
     
     await seed_team_members()
     await seed_sample_clients()
+    await migrate_to_workspace_system()
     
     logger.info("Data seeding completed!")
 

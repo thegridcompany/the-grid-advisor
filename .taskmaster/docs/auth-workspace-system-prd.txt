@@ -1,0 +1,515 @@
+# Grid Brain - Workspace Management & Enhanced Authorization System
+## Product Requirements Document (UPDATED)
+
+# Overview  
+Grid Brain ha già un sistema di autenticazione Magic Link funzionante e basic project-level authorization. Ora necessita di un sistema di **workspace multi-tenant** e **gestione avanzata utenti** per supportare crescita aziendale e gestione clienti esterni.
+
+**Stato Attuale (GIÀ IMPLEMENTATO):**
+- ✅ Magic Link Authentication completo (backend + frontend)
+- ✅ Dual user system: TeamMember (@thegridcompany.it) + User (app)
+- ✅ Basic project authorization con ProjectMember roles
+- ✅ Frontend auth flow con protected routes
+- ✅ JWT token management e refresh
+
+**Problema da risolvere:** Mancano funzionalità per scalare l'applicazione:
+- **Workspace multi-tenant** - isolamento dati per organizzazioni diverse
+- **Unified user management** - admin dashboard per gestire utenti
+- **User invitation system** - onboarding automatico nuovi utenti
+- **Enhanced permissions** - controllo granulare risorse per workspace
+- **Client external access** - accesso limitato progetti per clienti
+
+**Target Users:**
+- Super admin (Paolo) - gestione completa sistema + multi-workspace
+- Admin workspace - gestione team proprio workspace
+- Utenti esistenti - switch between workspace quando applicabile
+- Clienti esterni - accesso limitato ai loro progetti
+
+**Valore:** Trasformare Grid Brain da tool interno a piattaforma scalabile per multiple organizzazioni mantenendo security e UX.
+
+# Core Features (NEW - Missing from current implementation)
+
+## 1. ✅ Magic Link Authentication [COMPLETED]
+**Status:** Fully implemented in backend + frontend
+**Current state:** 
+- TeamMember magic link for @thegridcompany.it emails
+- User password login for app users  
+- JWT token management
+- Protected routes con withAuth HOC
+
+## 2. Workspace Multi-Tenant System [NEW FEATURE]
+**Cosa fa:** Isolamento completo dati per organizzazioni diverse
+**Perché importante:** Permettere multiple aziende sulla stessa piattaforma mantenendo privacy
+**Come funziona:**
+- Workspace = tenant isolato (The Grid Company = workspace #1)
+- Row Level Security PostgreSQL per data isolation
+- Users possono appartenere a multiple workspace
+- Workspace switching in frontend header
+
+## 3. Unified User Management Dashboard [NEW FEATURE]
+**Cosa fa:** Admin interface per gestire utenti, workspace e permissions
+**Perché importante:** Centralizzare operazioni admin e onboarding
+**Come funziona:**
+- Unifica TeamMember + User in single interface
+- CRUD utenti con workspace assignment
+- Role management per workspace
+- Activity monitoring
+
+## 4. User Invitation & Onboarding System [NEW FEATURE]
+**Cosa fa:** Automated workflow per aggiungere nuovi utenti
+**Perché importante:** Scaling team e client onboarding
+**Come funziona:**
+- Admin crea invite con email + workspace + role
+- Sistema invia magic link invite 
+- New user guided setup (profile, workspace access)
+- Auto workspace assignment
+
+## 5. Enhanced Workspace-scoped Permissions [NEW FEATURE]
+**Cosa fa:** Granular permission system per workspace resources
+**Perché importante:** Controllo fine-grained accesso per clienti esterni
+**Come funziona:**
+- Estende ProjectMember a WorkspaceMember 
+- Permission matrix: workspace → projects → tickets
+- Client role con limited access ai loro progetti
+- Permission middleware per API endpoints
+
+# User Experience  
+
+## User Personas
+
+### 1. Super Admin (Paolo, CTO)
+- **Obiettivi:** Controllo completo sistema, gestione workspace multipli
+- **Pain points:** Necessità visibilità totale, gestione sicurezza
+- **Features principali:** Dashboard globale, gestione multi-workspace, analytics sistema
+
+### 2. Admin Workspace (Project Manager)
+- **Obiettivi:** Gestire team del proprio workspace, assegnare progetti
+- **Pain points:** Coordinare team, controllare accessi progetti
+- **Features principali:** Gestione utenti workspace, assegnazione permessi progetti
+
+### 3. Developer/Employee
+- **Obiettivi:** Accesso veloce ai propri progetti, collaborazione team
+- **Pain points:** Login veloce, trovare informazioni rilevanti
+- **Features principali:** Dashboard personalizzata, notifiche, accesso progetti assegnati
+
+### 4. Client Esterno
+- **Obiettivi:** Monitorare stato progetti, comunicare con team
+- **Pain points:** Accesso semplice, informazioni chiare progresso
+- **Features principali:** Vista limitata progetti, comunicazione, reportistica
+
+## Key User Flows
+
+### 1. First-Time Access Flow
+```
+Non-authenticated user → Landing page → Redirect to login → 
+Email input → Magic link sent → Email click → 
+Auto-login → Role-based dashboard redirect
+```
+
+### 2. Daily Access Flow
+```
+Returning user → URL access → Check auth → 
+If valid: Dashboard redirect | If expired: Login flow
+```
+
+### 3. Admin User Management Flow
+```
+Admin dashboard → User management → Add user → 
+Send invite → User receives email → Registration flow → 
+Admin assigns roles/workspace → User active
+```
+
+### 4. Workspace Switching Flow (Multi-workspace users)
+```
+Dashboard → Workspace selector → Switch workspace → 
+Context change → Dashboard refresh with new data
+```
+
+## UI/UX Considerations
+- **Login Page:** Minimalista, solo campo email + CTA chiaro
+- **Dashboard:** Layout modulare basato su ruolo utente
+- **Navigation:** Breadcrumb + sidebar con permessi-based menu items
+- **Workspace Indicator:** Header sempre visibile con workspace corrente
+- **Mobile Responsive:** Login e dashboard principale responsive
+- **Loading States:** Skeleton loading per tutti i componenti dati
+
+# Technical Architecture  
+
+## System Components
+
+### Frontend (React + TypeScript)
+```
+src/
+├── components/
+│   ├── auth/
+│   │   ├── LoginForm.tsx
+│   │   ├── MagicLinkHandler.tsx
+│   │   └── ProtectedRoute.tsx
+│   ├── workspace/
+│   │   ├── WorkspaceSelector.tsx
+│   │   └── WorkspaceDashboard.tsx
+│   └── admin/
+│       ├── UserManagement.tsx
+│       └── WorkspaceManagement.tsx
+├── hooks/
+│   ├── useAuth.tsx
+│   ├── usePermissions.tsx
+│   └── useWorkspace.tsx
+├── store/
+│   ├── authStore.ts
+│   ├── workspaceStore.ts
+│   └── permissionsStore.ts
+└── utils/
+    ├── auth.ts
+    ├── permissions.ts
+    └── api.ts
+```
+
+### Backend (FastAPI + Python)
+```
+app/
+├── api/
+│   ├── auth.py (login, magic-link, logout)
+│   ├── users.py (CRUD utenti)
+│   ├── workspaces.py (gestione workspace)
+│   └── permissions.py (ruoli e permessi)
+├── core/
+│   ├── auth.py (JWT, middleware)
+│   ├── permissions.py (RBAC logic)
+│   └── workspace.py (tenant isolation)
+├── models/
+│   ├── user.py
+│   ├── workspace.py
+│   ├── role.py
+│   └── permission.py
+└── services/
+    ├── auth_service.py
+    ├── email_service.py
+    └── workspace_service.py
+```
+
+## Data Models
+
+### ✅ Existing Models (Already Implemented)
+```python
+# Current User system - manteniamo
+class User(BaseDBModel):
+    username: str
+    email: EmailStr  
+    hashed_password: str
+    role: UserRole  # CONSULTANT_PO, DEVELOPER, TECH_LEAD, etc.
+    is_active: bool
+    first_name: Optional[str]
+    last_name: Optional[str]
+
+# Current TeamMember system - integriamo con workspace
+class TeamMember(BaseDBModel):
+    email: EmailStr  # Must be @thegridcompany.it
+    name: str
+    role: str
+    is_active: bool
+    notification_preferences: Dict[str, Any]
+
+# Current project authorization - estendiamo
+class ProjectMember(BaseDBModel):
+    project_id: UUID
+    user_id: UUID  
+    role: str  # member, admin, viewer
+    joined_at: datetime
+```
+
+### 🆕 New Models (To Implement)
+```python
+class Workspace(BaseDBModel):
+    name: str  # "The Grid Company", "Client XYZ" 
+    slug: str  # URL-friendly: "thegrid", "client-xyz"
+    description: Optional[str]
+    is_active: bool = True
+    owner_id: UUID  # Reference to User/TeamMember who owns workspace
+    settings: Dict[str, Any] = {}  # Custom workspace settings
+    domain: Optional[str]  # Email domain for auto-assignment
+
+class WorkspaceMember(BaseDBModel):
+    workspace_id: UUID
+    user_id: UUID  # Can reference both User or TeamMember
+    role: WorkspaceRole  # SUPER_ADMIN, ADMIN, MEMBER, CLIENT, VIEWER
+    joined_at: datetime
+    is_active: bool = True
+    invited_by: Optional[UUID]
+
+class UserInvitation(BaseDBModel):
+    email: EmailStr
+    workspace_id: UUID
+    role: WorkspaceRole
+    invited_by: UUID
+    expires_at: datetime
+    accepted_at: Optional[datetime]
+    token: str  # For secure invite links
+    status: Literal["pending", "accepted", "expired", "cancelled"]
+```
+
+## APIs and Integrations
+
+### Authentication Endpoints
+```
+POST /api/v1/auth/login           # Magic link request
+GET  /api/v1/auth/verify/{token}  # Magic link verification
+POST /api/v1/auth/logout          # Logout
+GET  /api/v1/auth/me              # Current user info
+```
+
+### User Management Endpoints
+```
+GET    /api/v1/users                    # List users (admin)
+POST   /api/v1/users                    # Create user (admin)
+GET    /api/v1/users/{id}               # Get user
+PUT    /api/v1/users/{id}               # Update user
+DELETE /api/v1/users/{id}               # Delete user (admin)
+POST   /api/v1/users/{id}/invite        # Send invite
+PUT    /api/v1/users/{id}/role          # Update role (admin)
+```
+
+### Workspace Endpoints
+```
+GET    /api/v1/workspaces               # List user workspaces
+POST   /api/v1/workspaces               # Create workspace (admin)
+GET    /api/v1/workspaces/{id}          # Get workspace
+PUT    /api/v1/workspaces/{id}          # Update workspace
+DELETE /api/v1/workspaces/{id}          # Delete workspace
+POST   /api/v1/workspaces/{id}/switch   # Switch current workspace
+```
+
+## Infrastructure Requirements
+- **Database:** PostgreSQL con Row Level Security per tenant isolation
+- **Email Service:** SMTP configurabile + template system per magic links
+- **Caching:** Redis per session storage e rate limiting
+- **Frontend Hosting:** Vercel/Netlify con environment-based config
+- **Backend Hosting:** Docker containers con health checks
+- **Monitoring:** Sentry per error tracking, logging strutturato
+
+# Development Roadmap (UPDATED based on existing implementation)
+
+## ✅ COMPLETED (Current State)
+- Magic Link Authentication (backend + frontend)
+- User + TeamMember dual system 
+- Basic Project authorization con ProjectMember
+- Frontend auth flow (login, verify, protected routes)
+- JWT token management
+- Database schema base
+- Email service per magic links
+
+## Phase 1: Workspace Foundation (MVP)
+**Goal:** Implementare workspace multi-tenant base
+
+### Backend Tasks:
+1. **Workspace Database Schema**
+   - Nuove tabelle: workspaces, workspace_members, user_invitations
+   - Migrazione dati esistenti: The Grid Company = default workspace
+   - Seed data con workspace "The Grid Company"
+   
+2. **Workspace Core Logic**
+   - Workspace service per CRUD operations
+   - User-workspace association logic
+   - Context middleware per workspace isolation
+   
+3. **Enhanced Auth Service**
+   - Estendere JWT token con workspace_id
+   - Workspace-aware authentication
+   - Default workspace assignment
+   
+4. **Basic Workspace APIs**
+   - `/api/workspaces` - list user workspaces
+   - `/api/workspaces/{id}/switch` - switch workspace
+   - `/api/workspaces/{id}/members` - list workspace members
+
+### Frontend Tasks:
+1. **Workspace Context**
+   - WorkspaceStore con Zustand
+   - Workspace selector component
+   - Context switching UI
+   
+2. **Enhanced Auth State**
+   - Include workspace info in auth store
+   - Workspace-aware navigation
+   - Workspace indicator in header
+
+**Success Criteria:** Utenti possono vedere e switchare tra workspace (inizialmente solo "The Grid Company")
+
+## Phase 2: Admin Dashboard & User Management
+**Goal:** Interface completa per gestione utenti e workspace
+
+### Backend Tasks:
+1. **User Invitation System**
+   - UserInvitation model e APIs
+   - Email invite con magic link tokens
+   - Automatic workspace assignment workflow
+   - Invite expiration e management
+   
+2. **Admin APIs**
+   - `/api/admin/users` - unified user management (TeamMember + User)
+   - `/api/admin/workspaces` - workspace CRUD operations
+   - `/api/admin/invitations` - invitation management
+   - Permission middleware per admin-only endpoints
+   
+3. **Enhanced User Service**
+   - Unified user creation (auto TeamMember o User based on email)
+   - Bulk user operations
+   - User activation/deactivation
+
+### Frontend Tasks:
+1. **Admin Dashboard**
+   - User management table con search/filter
+   - Workspace creation/edit forms
+   - Invitation management interface
+   - Bulk operations (invite multiple users)
+   
+2. **User Profile Enhancement**
+   - User profile editing
+   - Workspace membership view
+   - Permission summary for current user
+   
+3. **Navigation Enhancement**
+   - Admin-only menu items
+   - Role-based component visibility
+   - Workspace context in all navigation
+
+**Success Criteria:** Super admin può gestire users + workspace, inviare inviti, assegnare ruoli
+
+## Phase 3: Multi-Tenant & Client Access
+**Goal:** Full multi-tenant support + external client access
+
+### Backend Tasks:
+1. **Data Isolation Implementation**
+   - Row Level Security policies per workspace
+   - Workspace-scoped queries per tutti i moduli esistenti
+   - Migration script per associare existing data al default workspace
+   
+2. **Client External Access**
+   - Client user type con limited permissions
+   - Client-specific project visibility rules
+   - API endpoints workspace-aware (projects, tickets, etc.)
+   
+3. **Advanced Security**
+   - Rate limiting per workspace
+   - Audit logging con workspace context
+   - Session management con workspace switching
+
+### Frontend Tasks:
+1. **Client Portal Interface**
+   - Simplified client dashboard
+   - Project-only view per client users
+   - Client-friendly navigation e terminologia
+   
+2. **UX Polish**
+   - Onboarding flow per invited users
+   - Mobile-responsive workspace selector
+   - Loading states e error handling
+   
+3. **Multi-Workspace Management**
+   - Workspace creation flow
+   - Workspace settings management
+   - Bulk user transfer between workspace
+
+**Success Criteria:** Sistema production-ready per multiple organizzazioni + client esterni con accesso limitato
+
+# Logical Dependency Chain (UPDATED)
+
+## ✅ Foundation Already Complete
+1. **Auth System** → Magic link + JWT già funzionante
+2. **Database Schema** → User, TeamMember, Project, ProjectMember esistenti
+3. **Frontend Auth** → Login, verify, protected routes funzionanti
+4. **Email Service** → Magic link delivery operativo
+
+## Phase 1 - Workspace Foundation
+5. **Workspace Models** → Nuove tabelle database workspace-related
+6. **Workspace Service** → Backend logic per workspace operations
+7. **Enhanced JWT** → Include workspace_id in token payload
+8. **Workspace API endpoints** → Basic CRUD + switch operations
+9. **Frontend Workspace Store** → State management per workspace
+10. **Workspace UI Components** → Selector + context indicator
+
+## Phase 2 - Admin & Management
+11. **User Invitation System** → Dipende da workspace foundation
+12. **Admin APIs** → Dipende da workspace + invitation system
+13. **Admin Dashboard** → Dipende da admin APIs
+14. **Enhanced User Management** → Unifica TeamMember + User systems
+
+## Phase 3 - Multi-Tenant & Scaling
+15. **Row Level Security** → Dipende da complete workspace system
+16. **Client Access System** → Dipende da RLS + admin management
+17. **Data Migration** → Associa existing data a default workspace
+18. **Client Portal UI** → Interface dedicata per client esterni
+
+**Approccio Incrementale:** Ogni phase aggiunge valore immediately usable. Phase 1 = workspace interno. Phase 2 = admin powerful. Phase 3 = external clients. Niente breaking changes per sistema esistente.
+
+# Risks and Mitigations  
+
+## Technical Challenges
+**Risk:** Complessità multi-tenant data isolation
+**Mitigation:** Start con Row Level Security PostgreSQL, pattern provato + documentazione chiara
+
+**Risk:** Frontend state management per auth/workspace context
+**Mitigation:** Use React Context + local storage, keep it simple initially
+
+**Risk:** Email deliverability per magic links
+**Mitigation:** Use transactional email service (SendGrid/AWS SES), implement retry logic
+
+## MVP Definition
+**Risk:** Breaking existing functionality
+**Mitigation:** 
+- Phase 1 focus: additive changes only, no breaking changes
+- Maintain existing auth flows (TeamMember magic link + User password)
+- Default workspace assignment per existing users
+- Incremental rollout workspace features
+
+**Risk:** Data migration complexity
+**Mitigation:**
+- Start con single default workspace ("The Grid Company")
+- Associate existing projects/data to default workspace
+- Test migration scripts in staging extensively
+
+## Resource Constraints
+**Risk:** Tempi sviluppo frontend + backend
+**Mitigation:** 
+- Start backend-first con mock frontend
+- Use component libraries (MUI/Chakra) per UI velocity
+- Prioritize core flows over edge cases
+
+**Risk:** Testing complexity multi-tenant system
+**Mitigation:**
+- Unit tests per auth logic
+- Integration tests per permission flows
+- Staging environment con multiple workspace test
+
+# Appendix  
+
+## Research Findings
+- **✅ Magic Link Auth:** Already implemented successfully, following Shopify/Notion patterns
+- **Multi-tenant Patterns:** Row Level Security PostgreSQL for data isolation (proven pattern)
+- **React State Management:** Zustand already used for auth, extend per workspace
+- **Workspace UI Patterns:** Slack, Discord, Notion workspace switchers for UX reference
+- **Invitation Systems:** GitHub organization invites, Slack workspace invites for workflow inspiration
+
+## Technical Specifications
+- **✅ JWT Expiry:** 24h access token (già implementato, no refresh token pattern)
+- **✅ Magic Link Expiry:** 15 minuti (già implementato)
+- **Enhanced JWT Payload:** Add workspace_id field to existing token structure
+- **✅ Database:** PostgreSQL con vector extension (già setup)
+- **Row Level Security:** Enable RLS policies per workspace isolation
+- **Workspace Slug Pattern:** lowercase, alphanumeric + hyphens only
+
+## Security Considerations
+- **OWASP Compliance:** Input validation, CSRF protection, XSS prevention
+- **Rate Limiting:** 5 magic link requests per hour per email
+- **Audit Logging:** All admin actions logged con timestamp + user
+- **Data Encryption:** At rest + in transit, PII hashing dove possibile
+
+## Performance Targets
+- **Login Flow:** <3s end-to-end magic link generation
+- **Dashboard Load:** <2s initial load con skeleton states
+- **Permission Check:** <100ms per API call
+- **Workspace Switch:** <1s context change
+
+## Compliance Notes
+- **GDPR:** User data deletion support, consent tracking
+- **SOC2:** Audit logging, access controls, data encryption
+- **Privacy:** Minimal data collection, clear privacy policy 

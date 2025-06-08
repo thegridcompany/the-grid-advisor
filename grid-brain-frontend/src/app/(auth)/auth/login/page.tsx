@@ -130,7 +130,7 @@ export default function LoginPage() {
     }
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/auth/magic-login`, {
+      const response = await fetch(`${BACKEND_URL}/api/v1/auth/magic-login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -1,0 +1,93 @@
+<context>
+# Overview
+Grid Brain si evolverà in un **assistente di project management AI-nativo**. L'obiettivo è trasformare l'interazione utente da un'esperienza basata su form e click a un'interfaccia conversazionale intelligente. L'utente dialogherà con un LLM (locale, via Ollama) che, tramite function calling, orchestrerà tutte le operazioni del sistema, dalla creazione di progetti all'analisi dei dati. La dashboard tradizionale diventerà una chat potenziata, capace di visualizzare dati complessi e file direttamente nell'interfaccia.
+
+# Core Features
+## 1. AI-Driven Chat Interface (Nuovo)
+Sostituire l'attuale dashboard con un'interfaccia di chat come punto di interazione primario.
+- **Obiettivo**: Permettere agli utenti di gestire progetti tramite linguaggio naturale.
+- **Requisiti Funzionali**:
+    - Interfaccia di chat reattiva (con cronologia).
+    - Integrazione con un LLM locale via Ollama.
+    - Implementazione di un sistema di "function calling" (via LangChain) per permettere all'AI di eseguire azioni (es. `createProject`, `addTask`, `inviteMember`).
+    - Input utente tramite testo e upload di file (inizialmente PDF).
+- **Requisiti Non Funzionali**:
+    - Risposta della chat in tempo reale (WebSockets).
+    - Bassa latenza per le chiamate all'LLM locale.
+
+## 2. Onboarding Guidato e Creazione Progetto via Chat (Nuovo)
+Migliorare radicalmente il flusso per i nuovi utenti.
+- **Obiettivo**: Guidare l'utente alla creazione del suo primo progetto in modo intuitivo.
+- **Flusso Utente**:
+    1.  Al primo login, l'utente atterra direttamente sulla chat.
+    2.  L'AI lo accoglie e gli chiede di descrivere il suo primo progetto.
+    3.  L'utente descrive il progetto.
+    4.  L'AI, tramite function calling, esegue `createProject` con i dati forniti.
+    5.  L'AI conferma la creazione e suggerisce i passi successivi (es. "Vuoi aggiungere collaboratori?" o "Iniziamo a definire i primi task?").
+
+## 3. Visualizzazione Dati Avanzata in Chat (Nuovo)
+Potenziare la chat per renderizzare contenuti complessi.
+- **Obiettivo**: Mostrare dati e file senza lasciare l'interfaccia di chat.
+- **Requisiti Funzionali**:
+    - Componente `canvas` per visualizzare anteprime di file PDF caricati.
+    - Renderizzazione di componenti interattivi come risposta dell'AI (es. una mini-tabella di task, un grafico a barre).
+
+## 4. Gestione Collaboratori (Dal PRD Precedente)
+Implementare un sistema completo per la gestione dei membri del team per progetto.
+- **Requisiti**:
+    - UI per invitare, rimuovere e modificare i ruoli dei membri (accessibile sia via chat che da un'impostazione di progetto tradizionale).
+    - API per supportare queste operazioni.
+    - Flusso di notifiche email per gli inviti.
+
+## 5. Gantt Chart (Dal PRD Precedente)
+Aggiungere una vista Gantt per la pianificazione temporale.
+- **Requisiti**:
+    - Vista timeline interattiva con drag & drop.
+    - Visualizzazione delle dipendenze.
+    - Sincronizzazione con la vista Kanban.
+</context>
+<PRD>
+# Technical Architecture
+## Backend (FastAPI)
+- **Orchestrazione AI**: Adottare **LangChain** per gestire:
+    - Tool/Function Calling: Creare `tools` LangChain che mappano le funzioni di servizio esistenti (es. `project_service.create_project`).
+    - Agent: Utilizzare un agent (es. `OpenAIFunctionsAgent`) per decidere quale tool chiamare in base all'input della chat.
+    - Integrazione LLM: Wrapper per **Ollama** per connettersi all'LLM locale.
+- **Comunicazione Real-time**: Implementare **WebSockets** (`FastAPI.websockets`) per la comunicazione bidirezionale con la chat del frontend.
+- **API Aggiuntive**:
+    - `POST /chat`: Endpoint per gestire i messaggi in arrivo e le risposte in streaming.
+    - Sviluppare le API per la gestione dei collaboratori come definito nel PRD precedente.
+
+## Frontend (Next.js)
+- **Chat UI**: Utilizzare una libreria come `react-hot-toast` o simile per l'interfaccia.
+- **State Management**: Gestire lo stato della chat (messaggi, stato di loading dell'AI) con Zustand o React Context.
+- **WebSockets**: Utilizzare `socket.io-client` o l'API nativa del browser per connettersi al backend.
+- **PDF/Canvas Rendering**: Utilizzare `react-pdf` per renderizzare i PDF su un elemento `<canvas>`.
+- **Componenti Dinamici**: Implementare un sistema per renderizzare componenti React specifici (es. `<TaskTable />`) in base alla risposta strutturata dell'AI.
+
+# Development Roadmap
+La roadmap è stata riorganizzata per dare priorità all'esperienza AI-nativa.
+
+## Fase 1: Fondamenta AI e Onboarding (3-4 settimane)
+1. **Backend**: Integrare LangChain e Ollama. Creare un primo agent con un tool per `createProject`. Implementare l'endpoint WebSocket.
+2. **Frontend**: Sviluppare l'interfaccia di chat di base. Implementare il flusso di onboarding guidato per i nuovi utenti.
+3. **Obiettivo**: Un nuovo utente può registrarsi, loggarsi e creare il suo primo progetto parlando con l'AI.
+
+## Fase 2: Potenziamento Chat e Gestione Collaboratori (2-3 settimane)
+1. **Backend**: Aggiungere i tool LangChain per la gestione dei collaboratori.
+2. **Frontend**: Sviluppare la UI per la gestione dei collaboratori (sia come componente richiamabile dalla chat che in una pagina di impostazioni). Integrare la visualizzazione PDF nella chat.
+3. **Obiettivo**: L'utente può invitare e gestire collaboratori tramite chat. Può caricare un PDF e vederne un'anteprima.
+
+## Fase 3: Gantt Chart e Strumenti Visivi Avanzati (2-3 settimane)
+1. **Backend**: Sviluppare le API per il Gantt chart. Creare i tool LangChain per manipolare i task del Gantt.
+2. **Frontend**: Implementare il componente Gantt Chart interattivo.
+3. **Obiettivo**: L'utente può chiedere all'AI di "mostrare la timeline del progetto" e vedere un Gantt Chart.
+
+# Risks and Mitigations
+- **Rischio Latenza LLM Locale**: Un LLM su macchina locale potrebbe essere lento.
+  - **Mitigazione**: Ottimizzare i prompt. Utilizzare modelli quantizzati (es. 4-bit). Mostrare indicatori di "AI sta pensando..." nel frontend per gestire l'attesa.
+- **Rischio Complessità Function Calling**: La logica per far decidere all'AI quale funzione chiamare può essere fragile.
+  - **Mitigazione**: Progettare prompt molto chiari e descrizioni dei tool inequivocabili. Iniziare con pochi tool e aggiungerne progressivamente. Aggiungere un robusto sistema di logging per il debug delle decisioni dell'agent.
+- **Rischio Sicurezza**: Dare a un LLM la capacità di eseguire azioni richiede controlli rigorosi.
+  - **Mitigazione**: Il `function calling` deve sempre operare nel contesto dei permessi dell'utente loggato. L'agent non deve mai avere permessi superiori a quelli dell'utente. Validare tutti gli input prima di eseguirli.
+</PRD> 

@@ -3,12 +3,15 @@ Authentication API endpoints.
 """
 from fastapi import APIRouter, HTTPException, Depends, Header, Body
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, Dict, Any, List, Callable
+from typing import Optional, Dict, Any, List
 from uuid import UUID
 
 from ..services.auth import AuthService
 from ..core.logging import get_logger
-from ..db.models import User, UserRole, TeamMember
+from ..db.models import User, UserRole, TeamMember, Workspace
+from ..core.auth import create_access_token
+from ..services.workspace_service import WorkspaceService
+from .dependencies import get_current_active_user, require_role
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -36,6 +39,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user_info: Optional[Dict[str, Any]] = None
+    workspace_info: Optional[Dict[str, Any]] = None
 
 
 class UserResponse(BaseModel):
@@ -65,48 +69,19 @@ class CreateTeamMemberRequest(BaseModel):
 class LoginResponse(BaseModel):
     status: str
     message: str
+    workspaces: Optional[List[Dict[str, Any]]] = None
 
 
 class VerifyResponse(BaseModel):
     status: str
     access_token: Optional[str] = None
-    team_member: Optional[Dict[str, Any]] = None
+    user_info: Optional[Dict[str, Any]] = None
+    workspace_info: Optional[Dict[str, Any]] = None
     message: Optional[str] = None
 
 
 auth_service = AuthService()
-
-
-# RBAC Dependency
-def require_role(allowed_roles: List[UserRole]) -> Callable:
-    async def role_checker(current_user: User = Depends(get_current_active_user)) -> User:
-        if current_user.role not in allowed_roles:
-            logger.warning(f"User {current_user.email} with role {current_user.role} tried to access restricted endpoint. Allowed roles: {allowed_roles}")
-            raise HTTPException(
-                status_code=403,
-                detail=f"User does not have the required role. Allowed roles: {[role.value for role in allowed_roles]}"
-            )
-        return current_user
-    return role_checker
-
-
-async def get_current_active_user(authorization: str = Header(None)) -> User:
-    """Get current authenticated active user from token."""
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Authorization header required")
-    
-    try:
-        scheme, token = authorization.split(" ")
-        if scheme.lower() != "bearer":
-            raise HTTPException(status_code=401, detail="Invalid authentication scheme")
-    except ValueError:
-        raise HTTPException(status_code=401, detail="Invalid authorization header format")
-    
-    user = await auth_service.verify_user_access_token(token)
-    if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid or expired token, or inactive user")
-    
-    return user
+workspace_service = WorkspaceService()
 
 
 @router.post("/magic-login", response_model=LoginResponse)
@@ -117,18 +92,39 @@ async def magic_login(request: MagicLoginRequest):
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
     
-    return result
+    # After finding user, get their workspaces
+    user = await auth_service.get_user_by_email(request.email)
+    workspaces = []
+    if user:
+        user_workspaces = await workspace_service.get_user_workspaces(user.id)
+        workspaces = [{"id": ws.id, "name": ws.name, "slug": ws.slug} for ws in user_workspaces]
+
+    return {**result, "workspaces": workspaces}
 
 
 @router.post("/verify-magic-link", response_model=VerifyResponse)
 async def verify_magic_link(request: VerifyTokenRequest):
-    """Verify magic link token and return access token."""
+    """Verify magic link token and return access token with workspace context."""
     result = await auth_service.verify_magic_link(request.token)
     
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
     
-    return result
+    user = await auth_service.get_user_by_id(UUID(result["team_member"]["id"]))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found after verification")
+
+    user_workspaces = await workspace_service.get_user_workspaces(user.id)
+    default_workspace = user_workspaces[0] if user_workspaces else None
+    
+    access_token = await create_access_token(user, workspace_id=default_workspace.id if default_workspace else None)
+    
+    return {
+        "status": "success",
+        "access_token": access_token,
+        "user_info": UserResponse.from_orm(user).dict(),
+        "workspace_info": default_workspace.dict() if default_workspace else None
+    }
 
 
 @router.get("/me", response_model=UserResponse)
@@ -170,7 +166,7 @@ async def register_new_user(user_data: UserCreateRequest):
 
 @router.post("/token", response_model=TokenResponse)
 async def login_for_access_token(form_data: UserLoginRequest = Body(...)):
-    """Authenticate user and return access token."""
+    """Authenticate user and return access token with workspace context."""
     user = await auth_service.authenticate_user(email=form_data.email, password=form_data.password)
     if not user:
         raise HTTPException(
@@ -181,13 +177,17 @@ async def login_for_access_token(form_data: UserLoginRequest = Body(...)):
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
 
-    access_token = auth_service._generate_access_token_for_user(user)
+    user_workspaces = await workspace_service.get_user_workspaces(user.id)
+    default_workspace = user_workspaces[0] if user_workspaces else None
+
+    access_token = await create_access_token(user, workspace_id=default_workspace.id if default_workspace else None)
     user_info_for_response = UserResponse.from_orm(user).dict()
 
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user_info": user_info_for_response
+        "user_info": user_info_for_response,
+        "workspace_info": default_workspace.dict() if default_workspace else None
     }
 
 
@@ -204,4 +204,27 @@ async def create_team_member(request: CreateTeamMemberRequest):
     if result["status"] == "error":
         raise HTTPException(status_code=400, detail=result["message"])
     
-    return result 
+    return result
+
+
+@router.post("/switch-workspace/{workspace_id}", response_model=TokenResponse)
+async def switch_workspace(
+    workspace_id: UUID, 
+    current_user: User = Depends(get_current_active_user)
+):
+    """Generate a new token for a different workspace."""
+    user_workspaces = await workspace_service.get_user_workspaces(current_user.id)
+    target_workspace = next((ws for ws in user_workspaces if ws.id == workspace_id), None)
+
+    if not target_workspace:
+        raise HTTPException(status_code=403, detail="User does not have access to this workspace.")
+
+    access_token = await create_access_token(current_user, workspace_id=workspace_id)
+    user_info_for_response = UserResponse.from_orm(current_user).dict()
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_info": user_info_for_response,
+        "workspace_info": target_workspace.dict()
+    } 

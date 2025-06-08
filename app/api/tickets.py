@@ -1,55 +1,138 @@
 """
 Ticket and Comment Management API endpoints.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from typing import List, Optional
 from uuid import UUID
+from tortoise.expressions import Q
 
 from ..core.database import get_db_manager, DatabaseManager
 from ..core.logging import get_logger
-from ..db.models import Ticket, Comment, TicketStatus, TicketPriority
+from ..db.models import Ticket, Comment, TicketStatus, TicketPriority, User
+from app.api.dependencies import get_current_active_user
+from app.core.workspace import get_workspace_context
+from app.core.permissions import ResourceType, ActionType
+from app.core.permission_middleware import require_permission, check_resource_ownership
+from app.services.project_service import ProjectService
 
 logger = get_logger(__name__)
-router = APIRouter()
+router = APIRouter(prefix="/api/v1/tickets", tags=["tickets"])
 
+async def get_ticket_owner_id(request: Request):
+    ticket_id = request.path_params.get("ticket_id")
+    if not ticket_id:
+        return None
+    
+    ticket = await Ticket.get_or_none(id=ticket_id)
+    if not ticket:
+        return None
+    
+    return ticket.reporter_id
 
 # Ticket endpoints
+@router.get("/", response_model=List[Ticket])
+async def list_tickets(
+    request: Request,
+    project_id: Optional[UUID] = None,
+    user: User = Depends(get_current_active_user),
+    workspace_id: UUID = Depends(get_workspace_context),
+    _permission = Depends(require_permission(ResourceType.TICKET, ActionType.READ))
+):
+    query = Ticket.all()
+    
+    if project_id:
+        project_service = ProjectService()
+        workspace_role = getattr(request.state, "workspace_role", None)
+        role_value = workspace_role.value if hasattr(workspace_role, 'value') else workspace_role
+        can_access = await project_service.can_access_project(
+            user_id=user.id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            role=role_value
+        )
+        if not can_access:
+            raise HTTPException(status_code=404, detail="Project not found")
+        query = query.filter(project_id=project_id)
+    
+    workspace_role = getattr(request.state, "workspace_role", None)
+    role_value = workspace_role.value if hasattr(workspace_role, 'value') else workspace_role
+    if role_value == "CLIENT":
+        query = query.filter(Q(reporter_id=user.id) | Q(assignee_id=user.id))
+    
+    tickets = await query
+    return tickets
+
+
+@router.post("/", response_model=Ticket)
+async def create_ticket(
+    request: Request,
+    ticket_data: Ticket,
+    user: User = Depends(get_current_active_user),
+    workspace_id: UUID = Depends(get_workspace_context),
+    _permission = Depends(require_permission(ResourceType.TICKET, ActionType.CREATE))
+):
+    project_service = ProjectService()
+    workspace_role = getattr(request.state, "workspace_role", None)
+    role_value = workspace_role.value if hasattr(workspace_role, 'value') else workspace_role
+    can_access = await project_service.can_access_project(
+        user_id=user.id,
+        project_id=ticket_data.project_id,
+        workspace_id=workspace_id,
+        role=role_value
+    )
+    if not can_access:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    new_ticket = await Ticket.create(
+        **ticket_data.dict(exclude_unset=True),
+        reporter_id=user.id
+    )
+    return new_ticket
+
+
 @router.get("/{ticket_id}", response_model=Ticket)
 async def get_ticket(
+    request: Request,
     ticket_id: UUID,
-    db: DatabaseManager = Depends(get_db_manager)
-) -> Ticket:
-    """Get a specific ticket."""
-    try:
-        ticket = await db.get_by_id("ticket", str(ticket_id))
-        if not ticket:
-            raise HTTPException(status_code=404, detail="Ticket not found")
-        return Ticket(**ticket)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to get ticket", ticket_id=str(ticket_id), error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to retrieve ticket")
+    user: User = Depends(get_current_active_user),
+    _permission = Depends(require_permission(ResourceType.TICKET, ActionType.READ))
+):
+    ticket = await Ticket.get_or_none(id=ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    workspace_role = getattr(request.state, "workspace_role", None)
+    role_value = workspace_role.value if hasattr(workspace_role, 'value') else workspace_role
+    if role_value == "CLIENT" and ticket.reporter_id != user.id and ticket.assignee_id != user.id:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    return ticket
 
 
 @router.put("/{ticket_id}", response_model=Ticket)
 async def update_ticket(
+    request: Request,
     ticket_id: UUID,
-    ticket: Ticket,
-    db: DatabaseManager = Depends(get_db_manager)
-) -> Ticket:
-    """Update a ticket."""
-    try:
-        ticket_data = ticket.dict(exclude_unset=True, exclude={"id", "created_at", "updated_at"})
-        updated_ticket = await db.update("ticket", str(ticket_id), ticket_data)
-        if not updated_ticket:
-            raise HTTPException(status_code=404, detail="Ticket not found")
-        return Ticket(**updated_ticket)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to update ticket", ticket_id=str(ticket_id), error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to update ticket")
+    ticket_update: Ticket,
+    user: User = Depends(get_current_active_user),
+    is_owner: bool = Depends(check_resource_ownership(ResourceType.TICKET, get_ticket_owner_id)),
+    _permission = Depends(require_permission(ResourceType.TICKET, ActionType.UPDATE))
+):
+    ticket = await Ticket.get_or_none(id=ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    
+    workspace_role = getattr(request.state, "workspace_role", None)
+    role_value = workspace_role.value if hasattr(workspace_role, 'value') else workspace_role
+    if role_value == "CLIENT" and not is_owner:
+        raise HTTPException(status_code=403, detail="Cannot update tickets you didn't create")
+    
+    update_data = ticket_update.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(ticket, key, value)
+    
+    await ticket.save()
+    return ticket
 
 
 @router.delete("/{ticket_id}")
